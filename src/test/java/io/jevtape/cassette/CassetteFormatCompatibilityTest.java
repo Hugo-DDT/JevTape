@@ -1,0 +1,129 @@
+package io.jevtape.cassette;
+
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.io.TempDir;
+
+import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.Locale;
+import java.util.stream.Stream;
+
+import static org.assertj.core.api.Assertions.assertThat;
+
+/**
+ * {@code fixtures/cassette-v1} is Cassette Format v1 as published: every build must still read it
+ * and must not rewrite it (charter §63, docs/cassette-format.md). These samples are the protocol's
+ * regression net — a change here is a format change and needs a migration.
+ */
+class CassetteFormatCompatibilityTest {
+
+    private static final Path FIXTURES = Path.of("fixtures", "cassette-v1");
+    private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    @TempDir
+    Path dir;
+
+    @Test
+    void everyCommittedV1CassetteIsStillReadable() throws IOException {
+        List<Path> fixtures = fixtures();
+        assertThat(fixtures).isNotEmpty();
+
+        FileCassetteRepository repo = new FileCassetteRepository(FIXTURES);
+        for (Path fixture : fixtures) {
+            Cassette cassette = repo.read(name(fixture));
+
+            assertThat(cassette.schemaVersion()).isEqualTo(Cassette.SCHEMA_VERSION);
+            assertThat(cassette.name()).isEqualTo(name(fixture));
+            assertThat(cassette.metadata().recordedAt())
+                    .matches("\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z");
+            assertThat(cassette.metadata().jevtapeVersion()).isNotBlank();
+            assertThat(cassette.request().requestedModel()).isNotBlank();
+            assertThat(cassette.request().state().isObject()).isTrue();
+            assertThat(cassette.request().questions().isObject()).isTrue();
+            assertThat(cassette.response().status()).isBetween(100, 599);
+            assertThat(cassette.response().body().isObject()).isTrue();
+            assertThat(cassette.fingerprints().request()).startsWith("sha256:");
+            assertThat(cassette.fingerprints().contract()).startsWith("sha256:");
+            assertThat(cassette.fingerprints().state()).startsWith("sha256:");
+        }
+    }
+
+    /** The samples are exactly what this build writes, so loading them never dirties a working tree. */
+    @Test
+    void rewritingACommittedCassetteChangesNothing() throws IOException {
+        FileCassetteRepository committed = new FileCassetteRepository(FIXTURES);
+        FileCassetteRepository rewritten = new FileCassetteRepository(dir);
+
+        for (Path fixture : fixtures()) {
+            rewritten.write(committed.read(name(fixture)));
+
+            assertThat(Files.readAllBytes(dir.resolve(fixture.getFileName())))
+                    .as("%s stays byte-identical", fixture.getFileName())
+                    .isEqualTo(Files.readAllBytes(fixture));
+        }
+    }
+
+    /** HTTP status is part of the tape (charter §54): an error response is a valid cassette. */
+    @Test
+    void errorStatusesAreRecordedLikeAnyOtherResponse() {
+        Cassette rateLimited = new FileCassetteRepository(FIXTURES).read("rate-limited");
+
+        assertThat(rateLimited.response().status()).isEqualTo(429);
+        assertThat(rateLimited.response().headers()).containsEntry("Retry-After", List.of("30"));
+        assertThat(rateLimited.response().body().path("error").path("type").asText())
+                .isEqualTo("rate_limit_exceeded");
+        // jev-latest may resolve to nothing at all when the call never reached a model.
+        assertThat(rateLimited.request().requestedModel()).isEqualTo("jev-latest");
+        assertThat(rateLimited.request().resolvedModel()).isNull();
+    }
+
+    @Test
+    void theDocumentKeepsThePublishedShape() throws IOException {
+        JsonNode root = MAPPER.readTree(FIXTURES.resolve("issue-routing.json").toFile());
+
+        assertThat(fieldNames(root)).containsExactly(
+                "schemaVersion", "name", "metadata", "request", "response", "fingerprints");
+        assertThat(fieldNames(root.get("metadata")))
+                .containsExactly("recordedAt", "jevtapeVersion", "durationMs");
+        assertThat(fieldNames(root.get("request")))
+                .containsExactly("method", "path", "requestedModel", "resolvedModel", "state", "questions");
+        assertThat(fieldNames(root.get("response")))
+                .containsExactly("status", "headers", "body");
+        assertThat(fieldNames(root.get("fingerprints")))
+                .containsExactly("request", "contract", "state");
+    }
+
+    @Test
+    void noCommittedCassetteCarriesCredentials() throws IOException {
+        for (Path fixture : fixtures()) {
+            String content = Files.readString(fixture, StandardCharsets.UTF_8).toLowerCase(Locale.ROOT);
+
+            assertThat(content)
+                    .as("%s holds no credential", fixture.getFileName())
+                    .doesNotContain("authorization", "cookie", "api-key", "api_key", "apikey");
+        }
+    }
+
+    private static List<Path> fixtures() throws IOException {
+        try (Stream<Path> files = Files.list(FIXTURES)) {
+            return files.filter(file -> file.getFileName().toString().endsWith(".json")).sorted().toList();
+        }
+    }
+
+    private static String name(Path fixture) {
+        String fileName = fixture.getFileName().toString();
+        return fileName.substring(0, fileName.length() - ".json".length());
+    }
+
+    private static List<String> fieldNames(JsonNode node) {
+        List<String> names = new ArrayList<>();
+        node.fieldNames().forEachRemaining(names::add);
+        return names;
+    }
+}

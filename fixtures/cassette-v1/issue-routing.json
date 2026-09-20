@@ -1,0 +1,107 @@
+{
+  "schemaVersion" : 1,
+  "name" : "issue-routing",
+  "metadata" : {
+    "recordedAt" : "2026-09-20T10:20:30Z",
+    "jevtapeVersion" : "0.1.0",
+    "durationMs" : 132
+  },
+  "request" : {
+    "method" : "POST",
+    "path" : "/v1/systemone",
+    "requestedModel" : "jev-latest",
+    "resolvedModel" : "jev-1.13.0",
+    "state" : {
+      "ticket" : {
+        "id" : "SUP-4821",
+        "subject" : "Cannot export invoice PDF",
+        "body" : "The export spins forever and then times out. Workspace: billing-eu.",
+        "channel" : "email"
+      },
+      "customer" : {
+        "plan" : "business",
+        "since" : "2024-03-01"
+      }
+    },
+    "questions" : {
+      "route" : {
+        "type" : "Choice",
+        "instructions" : "Choose the team that should handle this ticket.",
+        "options" : [
+          {
+            "value" : "billing",
+            "criteria" : "Invoices, payments and billing exports."
+          },
+          {
+            "value" : "technical",
+            "criteria" : "Bugs, errors and unexpected behaviour."
+          },
+          {
+            "value" : "other",
+            "criteria" : "Anything that is neither of those."
+          }
+        ]
+      },
+      "urgent" : {
+        "type" : "Noul",
+        "instructions" : "Is this ticket urgent?",
+        "criteria" : "Urgent when the customer is blocked and cannot work."
+      },
+      "severity" : {
+        "type" : "Score",
+        "instructions" : "Rate how severe this ticket is.",
+        "levels" : [
+          {
+            "score" : 0,
+            "criteria" : "Cosmetic, nobody is affected."
+          },
+          {
+            "score" : 3,
+            "criteria" : "A workflow is degraded but usable."
+          },
+          {
+            "score" : 5,
+            "criteria" : "The customer is fully blocked."
+          }
+        ]
+      }
+    }
+  },
+  "response" : {
+    "status" : 200,
+    "headers" : {
+      "Content-Type" : [
+        "application/json"
+      ]
+    },
+    "body" : {
+      "model" : "jev-1.13.0",
+      "answers" : {
+        "route" : {
+          "choice" : "billing",
+          "probabilities" : {
+            "billing" : 0.81,
+            "technical" : 0.12,
+            "other" : 0.07
+          },
+          "confidence" : 0.74
+        },
+        "urgent" : {
+          "probability" : 0.91
+        },
+        "severity" : {
+          "score" : 2.31
+        }
+      },
+      "usage" : {
+        "inputTokens" : 824,
+        "outputTokens" : 96
+      }
+    }
+  },
+  "fingerprints" : {
+    "request" : "sha256:9f2c1d4b7a6e58403c1f0a9b8d7e6f514032918a7b6c5d4e3f2019a8b7c6d5e4",
+    "contract" : "sha256:4b7e2a91c0d3f68517a4e9c2b0d8f1357ae6c49b2d0f81376ae5c9b4d2f07a18",
+    "state" : "sha256:c1a90f3e7b5d24816c0ae97d43b18f6052cd9a417be06f3d18c5a29e40b7f613"
+  }
+}

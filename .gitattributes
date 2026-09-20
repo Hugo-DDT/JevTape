@@ -1,0 +1,2 @@
+# JevTape writes cassettes with LF endings; keep the committed samples byte-identical on checkout.
+*.json text eol=lf

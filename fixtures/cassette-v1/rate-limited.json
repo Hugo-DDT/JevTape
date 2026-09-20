@@ -1,0 +1,60 @@
+{
+  "schemaVersion" : 1,
+  "name" : "rate-limited",
+  "metadata" : {
+    "recordedAt" : "2026-09-20T10:41:07Z",
+    "jevtapeVersion" : "0.1.0",
+    "durationMs" : 41
+  },
+  "request" : {
+    "method" : "POST",
+    "path" : "/v1/systemone",
+    "requestedModel" : "jev-latest",
+    "resolvedModel" : null,
+    "state" : {
+      "ticket" : {
+        "id" : "SUP-4900",
+        "subject" : "Duplicate charge",
+        "channel" : "chat"
+      }
+    },
+    "questions" : {
+      "refund" : {
+        "type" : "Choice",
+        "instructions" : "Should this charge be refunded?",
+        "options" : [
+          {
+            "value" : "yes",
+            "criteria" : "The charge is a duplicate."
+          },
+          {
+            "value" : "no",
+            "criteria" : "The charge is legitimate."
+          }
+        ]
+      }
+    }
+  },
+  "response" : {
+    "status" : 429,
+    "headers" : {
+      "Content-Type" : [
+        "application/json"
+      ],
+      "Retry-After" : [
+        "30"
+      ]
+    },
+    "body" : {
+      "error" : {
+        "type" : "rate_limit_exceeded",
+        "message" : "Too many requests, retry after 30 seconds."
+      }
+    }
+  },
+  "fingerprints" : {
+    "request" : "sha256:2e8b1c7a90d4f6358a0c7e19b4d2f86305a9c17e4b8d26f03a7c91e5b4d20f68",
+    "contract" : "sha256:71d0a4c9e2b85f36170ae9c482d1b6f0539c7a21be48d06f13c9a57e20b48d31",
+    "state" : "sha256:a03f91c7be42d08516f9ac3072be8d14605a9c73f21bd8046ae59c137b02df47"
+  }
+}
