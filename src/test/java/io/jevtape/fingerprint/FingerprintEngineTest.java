@@ -12,8 +12,9 @@ import java.nio.charset.StandardCharsets;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * 指纹引擎与 canonical JSON 的固定语义。这里覆盖 docs/matching.md 断言清单中已经落地的部分，
- * 其余（Score levels / Noul criteria 之类的 contract 细节）随后续任务补齐。
+ * 指纹引擎与 canonical JSON 的固定语义，覆盖 docs/matching.md 的完整断言清单（charter §60）：key 序不敏感、
+ * array 序敏感、question 文本 / Choice options / Score levels / Noul criteria / Question type 的变化都改
+ * contract hash、state 变化改 state hash，且这两者互不牵连（charter §29）。
  */
 class FingerprintEngineTest {
 
@@ -58,6 +59,36 @@ class FingerprintEngineTest {
 
     private static final String NO_MODEL = REQUEST.replace("\"model\":\"jev-latest\",", "");
 
+    /**
+     * Choice / Score / Noul 三类问题齐全的请求，形状与 {@code fixtures/cassette-v1/issue-routing.json} 一致。
+     * contract 指纹必须覆盖 charter §28 列出的全部字段，所以每一类都要单独证明它喂进了 hash。
+     */
+    private static final String ALL_QUESTION_TYPES = """
+            {"model":"jev-latest",\
+            "state":{"ticket":{"id":"SUP-4821"}},\
+            "questions":{\
+            "route":{"type":"Choice","instructions":"Choose the team.",\
+            "options":[{"value":"billing","criteria":"Invoices."},{"value":"technical","criteria":"Bugs."}]},\
+            "severity":{"type":"Score","instructions":"Rate the severity.",\
+            "levels":[{"score":0,"criteria":"Cosmetic."},{"score":5,"criteria":"Fully blocked."}]},\
+            "urgent":{"type":"Noul","instructions":"Is this urgent?","criteria":"Customer is blocked."}}}""";
+
+    private static final String REWORDED_OPTION = ALL_QUESTION_TYPES.replace(
+            "\"criteria\":\"Invoices.\"", "\"criteria\":\"Invoices, payments and refunds.\"");
+
+    private static final String EXTRA_OPTION = ALL_QUESTION_TYPES.replace(
+            "{\"value\":\"technical\",\"criteria\":\"Bugs.\"}]",
+            "{\"value\":\"technical\",\"criteria\":\"Bugs.\"},{\"value\":\"other\",\"criteria\":\"Anything else.\"}]");
+
+    private static final String REWORDED_SCORE_LEVEL = ALL_QUESTION_TYPES.replace(
+            "\"criteria\":\"Fully blocked.\"", "\"criteria\":\"The customer cannot work at all.\"");
+
+    private static final String REWORDED_NOUL_CRITERIA = ALL_QUESTION_TYPES.replace(
+            "\"criteria\":\"Customer is blocked.\"", "\"criteria\":\"Customer is blocked and losing money.\"");
+
+    private static final String SWAPPED_QUESTION_TYPE = ALL_QUESTION_TYPES.replace(
+            "\"type\":\"Noul\"", "\"type\":\"Choice\"");
+
     @Test
     void everyFingerprintIsAVersionedSha256HexDigest() {
         Fingerprints fingerprints = of(REQUEST);
@@ -97,6 +128,50 @@ class FingerprintEngineTest {
         assertThat(reworded.contract()).isNotEqualTo(of(REQUEST).contract());
         assertThat(reworded.request()).isNotEqualTo(of(REQUEST).request());
         assertThat(reworded.state()).isEqualTo(of(REQUEST).state());
+    }
+
+    /** charter §60 的 "choice option change"：改选项文案与新增选项都算改契约。 */
+    @Test
+    void choiceOptionChangesTheContractFingerprint() {
+        Fingerprints baseline = of(ALL_QUESTION_TYPES);
+
+        assertThat(of(REWORDED_OPTION).contract()).isNotEqualTo(baseline.contract());
+        assertThat(of(EXTRA_OPTION).contract()).isNotEqualTo(baseline.contract());
+        assertThat(of(REWORDED_OPTION).request()).isNotEqualTo(baseline.request());
+        assertThat(of(REWORDED_OPTION).state()).isEqualTo(baseline.state());
+    }
+
+    /** Score 的 levels 属于契约（charter §28）：等级文案一改，旧录制结果就不该被无条件复用。 */
+    @Test
+    void scoreLevelChangesTheContractFingerprint() {
+        Fingerprints baseline = of(ALL_QUESTION_TYPES);
+        Fingerprints reworded = of(REWORDED_SCORE_LEVEL);
+
+        assertThat(reworded.contract()).isNotEqualTo(baseline.contract());
+        assertThat(reworded.request()).isNotEqualTo(baseline.request());
+        assertThat(reworded.state()).isEqualTo(baseline.state());
+    }
+
+    /** Noul criteria 同样属于契约，且与 Choice / Score 各自独立生效。 */
+    @Test
+    void noulCriteriaChangesTheContractFingerprint() {
+        Fingerprints baseline = of(ALL_QUESTION_TYPES);
+        Fingerprints reworded = of(REWORDED_NOUL_CRITERIA);
+
+        assertThat(reworded.contract()).isNotEqualTo(baseline.contract());
+        assertThat(reworded.request()).isNotEqualTo(baseline.request());
+        assertThat(reworded.state()).isEqualTo(baseline.state());
+    }
+
+    /** 同一个 key 从 Noul 改成 Choice 就是契约变化，哪怕 instructions 一字未动。 */
+    @Test
+    void questionTypeChangesTheContractFingerprint() {
+        Fingerprints baseline = of(ALL_QUESTION_TYPES);
+        Fingerprints retyped = of(SWAPPED_QUESTION_TYPE);
+
+        assertThat(retyped.contract()).isNotEqualTo(baseline.contract());
+        assertThat(retyped.request()).isNotEqualTo(baseline.request());
+        assertThat(retyped.state()).isEqualTo(baseline.state());
     }
 
     @Test
