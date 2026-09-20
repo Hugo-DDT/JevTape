@@ -16,8 +16,11 @@ import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Objects;
+import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Stream;
 
 /**
  * 以 {@code <cassetteDir>/<name>.json} 形式存放 cassette（charter §24）。
@@ -33,6 +36,9 @@ public final class FileCassetteRepository implements CassetteRepository {
 
     /** 字母、数字、{@code . _ -}，且不以点开头的：名称永远无法逃出该目录。 */
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
+
+    /** 目录里算作 cassette 的文件名：一个安全名称加上 {@code .json}。其余文件（编辑器备份、README）一律跳过。 */
+    private static final Pattern CASSETTE_FILE = Pattern.compile("(" + SAFE_NAME.pattern() + ")\\.json");
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
     private static final ObjectWriter WRITER = MAPPER.writer(new DefaultPrettyPrinter()
@@ -82,6 +88,24 @@ public final class FileCassetteRepository implements CassetteRepository {
             Files.writeString(file, WRITER.writeValueAsString(cassette) + "\n", StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new StorageFailure("Cannot write cassette " + file, e);
+        }
+    }
+
+    @Override
+    public List<Cassette> loadAll() {
+        if (!Files.isDirectory(cassetteDir)) {
+            throw new CassetteNotFound("No cassette directory " + cassetteDir);
+        }
+        try (Stream<Path> files = Files.list(cassetteDir)) {
+            return files.filter(Files::isRegularFile)
+                    .map(file -> CASSETTE_FILE.matcher(file.getFileName().toString()))
+                    .filter(Matcher::matches)
+                    .map(matcher -> matcher.group(1))
+                    .sorted()
+                    .map(this::read)
+                    .toList();
+        } catch (IOException e) {
+            throw new StorageFailure("Cannot list cassettes under " + cassetteDir, e);
         }
     }
 

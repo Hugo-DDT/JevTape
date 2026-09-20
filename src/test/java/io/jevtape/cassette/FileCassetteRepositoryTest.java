@@ -156,6 +156,44 @@ class FileCassetteRepositoryTest {
     }
 
     @Test
+    void loadAllReturnsEveryCassetteSortedByName() {
+        FileCassetteRepository repo = repo();
+        repo.write(sample("issue-routing"));
+        repo.write(sample("zzz-noul"));
+        repo.write(sample("aaa-urgency"));
+
+        // 顺序即 replay 的优先级，因此它必须是名称序，而不是文件系统的偶然顺序。
+        assertThat(repo.loadAll())
+                .containsExactly(sample("aaa-urgency"), sample("issue-routing"), sample("zzz-noul"));
+    }
+
+    @Test
+    void loadAllSkipsFilesThatAreNotCassettes() throws IOException {
+        Path cassettes = dir.resolve("cassettes");
+        Files.createDirectories(cassettes);
+        Files.writeString(cassettes.resolve("notes.txt"), "not a cassette");
+        Files.writeString(cassettes.resolve(".issue-routing.json.swp"), "editor swap file");
+
+        assertThat(repo().loadAll()).isEmpty();
+    }
+
+    @Test
+    void loadAllWithoutADirectoryIsNotFound() {
+        assertThatThrownBy(() -> repo().loadAll())
+                .isInstanceOf(CassetteNotFound.class)
+                .hasMessageContaining("cassettes");
+    }
+
+    @Test
+    void loadAllRefusesToSilentlySkipACassetteItCannotRead() throws IOException {
+        repo().write(sample("issue-routing"));
+        writeRaw("aaa-broken", "{ this is not json");
+
+        // 静默跳过只会把损坏变成一个查不出原因的 MISS。
+        assertThatThrownBy(() -> repo().loadAll()).isInstanceOf(CassetteCorrupted.class);
+    }
+
+    @Test
     void missingSchemaVersionIsUnsupported() throws IOException {
         writeRaw("no-version", """
                 {"name": "no-version", "metadata": {}, "request": {}, "response": {}, "fingerprints": {}}
