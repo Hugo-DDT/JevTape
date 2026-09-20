@@ -39,7 +39,15 @@ Network: OFF
 
 HIT issue-routing
     4 ms — 0 network requests
+
+MISS
+    closest   issue-routing
+    state     MATCH
+    contract  CHANGED
+    model     MATCH
 ```
+
+Miss 的诊断直接指出是哪一部分变了：上面这一次是 Question（Decision Contract）改了，而 State 与 Model 都没动。
 
 将 `.jevtape/cassettes` 提交进 Git，CI 中即可在无 API Key、无网络的环境下运行全部 Jev 相关测试。
 
@@ -85,6 +93,8 @@ JevTape 记录的不只是 HTTP Response，而是完整的 **决策上下文**�
 ```
 
 配置优先级：`CLI 参数 > 环境变量 > .jevtape/config.json > 默认值`。
+
+`onMiss` 决定磁带里没有答案时怎么办：`error`（默认，返回 `JEVTAPE_REPLAY_MISS`）、`live`（转发真实 Jev，但不保存）、`record`（转发并补录成新 Cassette）。后两者会联网，必须显式启用 —— `jevtape replay --on-miss live`。
 
 API Key 通过环境变量提供，**绝不写入配置文件或 Cassette**。
 

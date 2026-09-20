@@ -4,7 +4,6 @@ import io.jevtape.cassette.Cassette;
 import io.jevtape.cassette.FileCassetteRepository;
 import io.jevtape.config.ConfigLoader;
 import io.jevtape.config.JevTapeConfig;
-import io.jevtape.contract.JevProtocolAdapter;
 import io.jevtape.server.JevProxyServer;
 import io.jevtape.shared.JevTapeVersion;
 import io.jevtape.transport.LiveJevTransport;
@@ -92,24 +91,7 @@ final class RecordCommand implements Runnable {
 
     /** 渲染一个 REC 块（charter §56）。它在代理线程上跑，因此整块输出要原子。 */
     private synchronized void render(Path cassettes, Cassette cassette) {
-        PrintWriter out = spec.commandLine().getOut();
-        out.println();
-        out.println("REC  " + cassette.name());
-        for (String question : JevProtocolAdapter.questionSummaries(cassette.request().questions())) {
-            out.println("     " + question);
-        }
-        out.println();
-        String model = cassette.request().resolvedModel() != null
-                ? cassette.request().resolvedModel()
-                : cassette.request().requestedModel();
-        if (model != null) {
-            out.println("     " + model);
-        }
-        out.println("     " + cassette.metadata().durationMs() + " ms");
-        out.println();
-        out.println("     saved:");
-        out.println("     " + cassettes.resolve(cassette.name() + ".json"));
-        out.flush();
+        RecBlock.print(spec.commandLine().getOut(), cassettes, cassette);
     }
 
     /** CLI 参数只把用户真的写了的那些交给配置合并，其余层级照常生效。 */

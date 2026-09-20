@@ -21,7 +21,6 @@ public final class ConfigLoader {
     private static final Pattern SECRET_FIELD =
             Pattern.compile("(?i).*(api[_-]?key|token|secret|password|authorization|cookie).*");
     private static final Set<String> MATCH_POLICIES = Set.of("strict");
-    private static final Set<String> MISS_POLICIES = Set.of("error", "live", "record");
 
     private final ObjectMapper mapper = new ObjectMapper();
 
@@ -33,7 +32,14 @@ public final class ConfigLoader {
                 resolveInt("port", "JEVTAPE_PORT", cli, env, file, d.port()),
                 resolveString("cassetteDir", "JEVTAPE_CASSETTE_DIR", cli, env, file, d.cassetteDir()),
                 resolveString("match", "JEVTAPE_MATCH", cli, env, file, d.match()),
-                resolveString("onMiss", "JEVTAPE_ON_MISS", cli, env, file, d.onMiss()));
+                resolveMissPolicy(cli, env, file, d.onMiss()));
+    }
+
+    /** miss 策略单独解析：它的取值是一个枚举，而不是一段自由的文本。 */
+    private MissPolicy resolveMissPolicy(Map<String, String> cli, Map<String, String> env, JsonNode file,
+                                         MissPolicy fallback) {
+        String raw = raw("onMiss", "JEVTAPE_ON_MISS", cli, env, file);
+        return raw == null ? fallback : MissPolicy.of(raw);
     }
 
     private JsonNode readConfigFile(Path configFile) {
@@ -74,7 +80,6 @@ public final class ConfigLoader {
                 yield value;
             }
             case "match" -> requireIn(key, value, MATCH_POLICIES);
-            case "onMiss" -> requireIn(key, value, MISS_POLICIES);
             default -> value;
         };
     }

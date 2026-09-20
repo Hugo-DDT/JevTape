@@ -21,13 +21,17 @@ public sealed interface MatchResult {
     }
 
     /**
-     * 没有任何 cassette 命中。{@code requestFingerprint} 是这次请求算出来的 replay key —— miss 诊断
-     * 以它为起点（charter §32）。
+     * 没有任何 cassette 命中。{@link #diagnosis()} 带着这次的 replay key 与最接近那个 cassette 的逐项对比，
+     * miss 的输出以它为全部内容（charter §32）。
      */
-    record Miss(String requestFingerprint) implements MatchResult {
+    record Miss(MissDiagnosis diagnosis) implements MatchResult {
 
         public Miss {
-            Objects.requireNonNull(requestFingerprint, "requestFingerprint");
+            Objects.requireNonNull(diagnosis, "diagnosis");
+        }
+
+        public String requestFingerprint() {
+            return diagnosis.requestFingerprint();
         }
     }
 }

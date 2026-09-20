@@ -34,7 +34,7 @@ class ConfigLoaderTest {
         assertThat(config.port()).isEqualTo(8787);
         assertThat(config.cassetteDir()).isEqualTo(".jevtape/cassettes");
         assertThat(config.match()).isEqualTo("strict");
-        assertThat(config.onMiss()).isEqualTo("error");
+        assertThat(config.onMiss()).isEqualTo(MissPolicy.ERROR);
     }
 
     @Test
@@ -49,7 +49,7 @@ class ConfigLoaderTest {
         assertThat(config.port()).isEqualTo(9000);
         assertThat(config.cassetteDir()).isEqualTo("tapes");
         assertThat(config.match()).isEqualTo("strict");
-        assertThat(config.onMiss()).isEqualTo("live");
+        assertThat(config.onMiss()).isEqualTo(MissPolicy.LIVE);
     }
 
     @Test
@@ -78,7 +78,7 @@ class ConfigLoaderTest {
                 file);
 
         assertThat(config.port()).isEqualTo(9200);
-        assertThat(config.onMiss()).isEqualTo("record");
+        assertThat(config.onMiss()).isEqualTo(MissPolicy.RECORD);
     }
 
     @Test
@@ -122,7 +122,9 @@ class ConfigLoaderTest {
                 .isInstanceOf(ConfigurationError.class)
                 .hasMessageContaining("strict");
         assertThatThrownBy(() -> loader.load(Map.of("onMiss", "ignore"), Map.of(), null))
-                .isInstanceOf(ConfigurationError.class);
+                .isInstanceOf(ConfigurationError.class)
+                .hasMessageContaining("onMiss")
+                .hasMessageContaining("[error, live, record]");
 
         Path blankListen = configFile("""
                 {"listen": ""}

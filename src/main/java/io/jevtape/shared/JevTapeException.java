@@ -13,4 +13,12 @@ public abstract class JevTapeException extends RuntimeException {
     protected JevTapeException(String message, Throwable cause) {
         super(message, cause);
     }
+
+    /**
+     * 写给客户端的错误标识。默认就是类型名；需要跨进程边界稳定引用的失败（例如 replay miss 的
+     * {@code JEVTAPE_REPLAY_MISS}，charter §32）由子类覆写成一个不随重命名变化的码。
+     */
+    public String code() {
+        return getClass().getSimpleName();
+    }
 }

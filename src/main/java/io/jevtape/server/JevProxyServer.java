@@ -109,13 +109,15 @@ public final class JevProxyServer implements AutoCloseable {
     }
 
     /**
-     * 即便传输层失败，欠客户端的答复仍要给出，因此连接从不被静默丢弃。
+     * 即便传输层失败，欠客户端的答复仍要给出，因此连接从不被静默丢弃。body 的第一段是失败的错误码 ——
+     * replay miss 是 {@code JEVTAPE_REPLAY_MISS}（charter §32），于是客户端能把"磁带里没有答案"与上游的
+     * 失败区分开；逐项对比留给 console，那里才是开发者读诊断的地方。
      *
-     * <p>ponytail: 不论类型，每个失败都映射为 502；待 miss 策略落地后，replay-miss 诊断需要它们自己的
-     * 状态码与 body。
+     * <p>ponytail: 不论类型，每个失败都映射为 502；天花板是客户端需要按状态码分流（例如把 miss 当成
+     * 404），届时在这里按 {@code failure.code()} 分流即可，body 格式不变。
      */
     private static void writeFailure(HttpExchange exchange, JevTapeException failure) throws IOException {
-        byte[] body = ("jevtape: " + failure.getClass().getSimpleName() + ": " + failure.getMessage() + "\n")
+        byte[] body = ("jevtape: " + failure.code() + ": " + failure.getMessage() + "\n")
                 .getBytes(StandardCharsets.UTF_8);
         exchange.getResponseHeaders().set("Content-Type", "text/plain; charset=utf-8");
         exchange.sendResponseHeaders(502, body.length);

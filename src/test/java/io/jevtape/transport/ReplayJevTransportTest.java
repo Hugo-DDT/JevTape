@@ -4,6 +4,7 @@ import io.jevtape.cassette.Cassette;
 import io.jevtape.cassette.CassetteRepository;
 import io.jevtape.cassette.FileCassetteRepository;
 import io.jevtape.matching.MatchResult;
+import io.jevtape.matching.MissDiagnosis;
 import io.jevtape.shared.InvalidJevRequest;
 import io.jevtape.shared.ReplayMiss;
 import io.jevtape.testing.FakeJevServer;
@@ -74,12 +75,43 @@ class ReplayJevTransportTest {
 
         assertThatThrownBy(() -> replay.send(request(REQUEST_BODY.replace("SUP-4821", "SUP-9999"))))
                 .isInstanceOf(ReplayMiss.class)
-                .hasMessageContaining("No cassette matches request fingerprint sha256:");
+                .hasMessageContaining("No cassette matches request fingerprint sha256:")
+                .hasMessageContaining("state CHANGED, contract MATCH, model MATCH");
         assertThatThrownBy(() -> replay.send(request(REQUEST_BODY.replace("Choose the team.", "Pick the team."))))
-                .isInstanceOf(ReplayMiss.class);
+                .isInstanceOf(ReplayMiss.class)
+                .hasMessageContaining("state MATCH, contract CHANGED, model MATCH");
 
         assertThat(decisions).hasSize(2)
                 .allSatisfy(decision -> assertThat(decision).isInstanceOf(MatchResult.Miss.class));
+    }
+
+    @Test
+    void aMissCarriesTheDiagnosisOfTheClosestCassette() {
+        // 任务 10 的验收：contract 变化的请求产生 MISS，诊断指名 Contract: CHANGED。
+        record(200, Map.of("Content-Type", "application/json"), RESPONSE_BODY);
+
+        assertThatThrownBy(() -> replaying().send(request(REQUEST_BODY.replace("Choose the team.", "Pick the team."))))
+                .isInstanceOf(ReplayMiss.class);
+
+        assertThat(decisions).singleElement().isInstanceOfSatisfying(MatchResult.Miss.class,
+                miss -> {
+                    MissDiagnosis diagnosis = miss.diagnosis();
+                    assertThat(diagnosis.requestFingerprint()).isEqualTo(miss.requestFingerprint());
+                    assertThat(diagnosis.closestCassette()).startsWith("systemone-");
+                    assertThat(diagnosis.state()).isEqualTo(MissDiagnosis.Verdict.MATCH);
+                    assertThat(diagnosis.contract()).isEqualTo(MissDiagnosis.Verdict.CHANGED);
+                    assertThat(diagnosis.model()).isEqualTo(MissDiagnosis.Verdict.MATCH);
+                });
+    }
+
+    @Test
+    void anEmptyTapeHasNothingToCompareAgainst() {
+        assertThatThrownBy(() -> new ReplayJevTransport(List.of(), decisions::add).send(request(REQUEST_BODY)))
+                .isInstanceOf(ReplayMiss.class)
+                .hasMessageContaining("no cassette to compare against");
+
+        assertThat(decisions).singleElement().isInstanceOfSatisfying(MatchResult.Miss.class,
+                miss -> assertThat(miss.diagnosis().closestCassette()).isNull());
     }
 
     @Test

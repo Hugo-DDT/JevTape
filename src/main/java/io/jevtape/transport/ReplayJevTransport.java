@@ -29,7 +29,9 @@ import java.util.function.Consumer;
  * <p>命中时交回录制的响应：状态码、headers 与 body 都是当年那一份（headers 是脱敏后的，凭证从来没被
  * 存下来）。body 是 cassette 里那份结构化 JSON 的紧凑序列化 —— 格式保留的是语义而非空白字符。
  *
- * <p>未命中抛 {@link ReplayMiss}：默认策略是 error，绝不"找不到就去请求线上"（charter §33）。
+ * <p>未命中抛 {@link ReplayMiss}，消息里带着最接近那个 cassette 的逐项对比；本类到此为止 —— miss 之后
+ * 是失败、是转发线上、还是转发并补录，由外面装配的 {@link MissFallbackJevTransport} 决定，默认根本不装配它
+ * （charter §33）。
  */
 public final class ReplayJevTransport implements JevTransport {
 
@@ -53,12 +55,12 @@ public final class ReplayJevTransport implements JevTransport {
         JevProtocolAdapter.Decision decision = JevProtocolAdapter.parseRequest(request.body());
         Fingerprints fingerprints = FingerprintEngine.of(request.method(), request.path(), decision);
 
-        MatchResult result = StrictMatcher.match(fingerprints.request(), cassettes);
+        MatchResult result = StrictMatcher.match(fingerprints, decision.requestedModel(), cassettes);
         onMatch.accept(result);
         return switch (result) {
             case MatchResult.Hit hit -> replay(hit.cassette().response());
             case MatchResult.Miss miss -> throw new ReplayMiss("No cassette matches request fingerprint "
-                    + miss.requestFingerprint() + " (" + cassettes.size() + " loaded)");
+                    + miss.requestFingerprint() + " — " + miss.diagnosis().summary());
         };
     }
 
