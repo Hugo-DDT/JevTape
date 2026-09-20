@@ -1,6 +1,6 @@
 package io.jevtape.shared;
 
-/** The upstream Jev API could not be reached at all. */
+/** 完全无法连接上游 Jev API。 */
 public final class UpstreamUnavailable extends JevTapeException {
 
     public UpstreamUnavailable(String message, Throwable cause) {

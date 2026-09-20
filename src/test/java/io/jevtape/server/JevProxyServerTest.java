@@ -253,7 +253,7 @@ class JevProxyServerTest {
                 .orElse(null);
     }
 
-    /** Stands in for record/replay: remembers what arrived, answers with a canned response. */
+    /** 代替 record/replay:记住收到的请求,并以预设响应作答。 */
     private static final class StubTransport implements JevTransport {
 
         private final List<JevRequest> received = new CopyOnWriteArrayList<>();

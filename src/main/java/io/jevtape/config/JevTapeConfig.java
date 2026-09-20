@@ -1,6 +1,6 @@
 package io.jevtape.config;
 
-/** Resolved JevTape configuration after precedence merging. */
+/** 优先级合并之后解析完成的 JevTape 配置。 */
 public record JevTapeConfig(String listen, int port, String cassetteDir, String match, String onMiss) {
 
     public static final JevTapeConfig DEFAULTS =

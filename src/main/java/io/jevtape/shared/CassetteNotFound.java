@@ -1,6 +1,6 @@
 package io.jevtape.shared;
 
-/** No cassette exists at the requested location. */
+/** 请求位置不存在对应的 cassette。 */
 public final class CassetteNotFound extends JevTapeException {
 
     public CassetteNotFound(String message) {

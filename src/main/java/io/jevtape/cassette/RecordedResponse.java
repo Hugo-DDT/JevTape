@@ -9,11 +9,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * The complete response the client actually received — status, relevant headers and the whole
- * structured body, not a summary of it (charter §53). Error statuses are responses too and are
- * recorded and replayed like any other (charter §54).
+ * 客户端实际收到的完整响应 —— 状态码、相关 headers 以及整个结构化 body，而非其摘要（charter §53）。
+ * 错误状态码也是响应，和其他响应一样被记录与回放（charter §54）。
  *
- * <p>Headers keep their recorded order so rewriting a cassette produces no diff.
+ * <p>Headers 保持记录时的顺序，因此重写一个 cassette 不会产生 diff。
  */
 public record RecordedResponse(int status, Map<String, List<String>> headers, JsonNode body) {
 
@@ -21,7 +20,7 @@ public record RecordedResponse(int status, Map<String, List<String>> headers, Js
         headers = headers == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(headers));
-        // JSON null binds to NullNode, so a null component would not survive a round trip.
+        // JSON null 会绑定为 NullNode，因此 null 分量无法在一次往返中存活。
         body = body == null ? NullNode.getInstance() : body;
     }
 }

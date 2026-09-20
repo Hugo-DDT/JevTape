@@ -4,10 +4,10 @@ import picocli.CommandLine.IExitCodeGenerator;
 import picocli.CommandLine.Model.CommandSpec;
 import picocli.CommandLine.Spec;
 
-/** Shared behaviour of every command whose implementation lands in a later roadmap task. */
+/** 所有实现排在后续路线图任务中的命令的共享行为。 */
 abstract class PlannedCommand implements Runnable, IExitCodeGenerator {
 
-    /** Distinct from picocli's USAGE (2) and SOFTWARE (1) so scripts can tell the three apart. */
+    /** 与 picocli 的 USAGE（2）和 SOFTWARE（1）取值不同，脚本可据此区分三者。 */
     static final int EXIT_NOT_IMPLEMENTED = 3;
 
     @Spec

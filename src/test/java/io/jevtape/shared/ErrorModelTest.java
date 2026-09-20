@@ -7,7 +7,7 @@ import java.io.IOException;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 
-/** Pins the error taxonomy of charter §71: these ten types, all under one unchecked root. */
+/** 锁定 charter §71 的错误分类体系:这十种类型,全部归属于同一个非受检异常根类。 */
 class ErrorModelTest {
 
     private static final List<Class<? extends JevTapeException>> ERROR_TYPES = List.of(

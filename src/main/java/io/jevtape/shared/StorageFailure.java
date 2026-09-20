@@ -1,6 +1,6 @@
 package io.jevtape.shared;
 
-/** Cassette storage could not be read from or written to. */
+/** cassette 存储无法读取或写入。 */
 public final class StorageFailure extends JevTapeException {
 
     public StorageFailure(String message, Throwable cause) {

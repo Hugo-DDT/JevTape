@@ -1,6 +1,6 @@
 package io.jevtape.shared;
 
-/** No recorded interaction matches the request fingerprint. */
+/** 没有任何已录制的交互与该请求的 fingerprint 匹配。 */
 public final class ReplayMiss extends JevTapeException {
 
     public ReplayMiss(String message) {

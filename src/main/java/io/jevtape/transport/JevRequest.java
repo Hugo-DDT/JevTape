@@ -5,10 +5,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * A Jev request as the application sent it. {@code path} is the request target and may carry a
- * query string; {@code body} is the raw payload, kept as bytes so replay stays byte-identical.
+ * 应用所发出的 Jev 请求。{@code path} 是请求目标，可能带有查询字符串；{@code body} 是原始载荷，
+ * 以字节形式保留，以便回放保持逐字节一致。
  *
- * <p>No value equality: request identity is defined by fingerprints, not by bytes.
+ * <p>无值相等语义：请求的身份由 fingerprint 定义，而非由字节定义。
  */
 public record JevRequest(String method, String path, Map<String, List<String>> headers, byte[] body) {
 

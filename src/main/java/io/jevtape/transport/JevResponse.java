@@ -5,11 +5,10 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * A Jev response, passed through untouched: status, relevant headers and the complete body
- * (charter §53, §54). Error statuses are responses too — only transport failures become exceptions.
+ * 一个 Jev 响应，原样透传：状态码、相关 headers 以及完整的 body（charter §53, §54）。
+ * 错误状态码也是响应 —— 只有传输层失败才会变成异常。
  *
- * <p>Equality is by value, body included, because "same request, same response" is the invariant
- * replay has to prove.
+ * <p>相等性按值判断，body 也包含在内，因为"相同请求、相同响应"是回放必须证明的不变量。
  */
 public record JevResponse(int status, Map<String, List<String>> headers, byte[] body) {
 

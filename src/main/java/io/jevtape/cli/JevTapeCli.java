@@ -1,6 +1,7 @@
 package io.jevtape.cli;
 
 import io.jevtape.shared.JevTapeException;
+import io.jevtape.shared.JevTapeVersion;
 import picocli.CommandLine;
 import picocli.CommandLine.Command;
 import picocli.CommandLine.Model.CommandSpec;
@@ -26,28 +27,22 @@ public final class JevTapeCli implements Runnable {
 
     static CommandLine commandLine() {
         CommandLine commandLine = new CommandLine(new JevTapeCli())
-                // ponytail: plain output keeps help and diagnostics byte-stable for tests and diffs;
-                // switch the factory to Ansi.AUTO if color is ever wanted.
+                // ponytail: 纯文本输出让 help 与诊断信息对测试和 diff 保持逐字节稳定；
+                // 如果将来需要颜色，把工厂换成 Ansi.AUTO 即可。
                 .setHelpFactory((spec, ansi) -> new CommandLine.Help(spec, CommandLine.Help.Ansi.OFF))
                 .setExecutionExceptionHandler(JevTapeCli::renderError);
 
-        String version = "jevtape " + implementationVersion();
+        String version = "jevtape " + JevTapeVersion.current();
         commandLine.getCommandSpec().version(version);
         commandLine.getSubcommands().values().forEach(sub -> sub.getCommandSpec().version(version));
         return commandLine;
-    }
-
-    /** Reads Implementation-Version from the shaded jar; "dev" when running from target/classes. */
-    private static String implementationVersion() {
-        String version = JevTapeCli.class.getPackage().getImplementationVersion();
-        return version == null ? "dev" : version;
     }
 
     public static void main(String[] args) {
         System.exit(commandLine().execute(args));
     }
 
-    /** Expected failures render as one line; anything else keeps its stack trace. */
+    /** 预期内的失败只渲染为一行；其他异常保留完整堆栈跟踪。 */
     private static int renderError(Exception ex, CommandLine cmd, CommandLine.ParseResult parseResult) throws Exception {
         if (ex instanceof JevTapeException) {
             cmd.getErr().println("jevtape: " + ex.getMessage());

@@ -17,9 +17,9 @@ import java.util.stream.Stream;
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
- * {@code fixtures/cassette-v1} is Cassette Format v1 as published: every build must still read it
- * and must not rewrite it (charter §63, docs/cassette-format.md). These samples are the protocol's
- * regression net — a change here is a format change and needs a migration.
+ * {@code fixtures/cassette-v1} 是已发布的 Cassette Format v1:每次构建都必须仍能读取它,
+ * 且不得改写它(charter §63、docs/cassette-format.md)。这些样例是该协议的回归防护网 ——
+ * 此处的任何变更都是格式变更,需要配套迁移方案。
  */
 class CassetteFormatCompatibilityTest {
 
@@ -54,7 +54,7 @@ class CassetteFormatCompatibilityTest {
         }
     }
 
-    /** The samples are exactly what this build writes, so loading them never dirties a working tree. */
+    /** 这些样例与本构建写出的内容完全一致,因此加载它们不会导致工作区出现改动。 */
     @Test
     void rewritingACommittedCassetteChangesNothing() throws IOException {
         FileCassetteRepository committed = new FileCassetteRepository(FIXTURES);
@@ -69,7 +69,7 @@ class CassetteFormatCompatibilityTest {
         }
     }
 
-    /** HTTP status is part of the tape (charter §54): an error response is a valid cassette. */
+    /** HTTP 状态码是录制内容的一部分(charter §54):错误响应也是一条合法的 cassette。 */
     @Test
     void errorStatusesAreRecordedLikeAnyOtherResponse() {
         Cassette rateLimited = new FileCassetteRepository(FIXTURES).read("rate-limited");
@@ -78,7 +78,7 @@ class CassetteFormatCompatibilityTest {
         assertThat(rateLimited.response().headers()).containsEntry("Retry-After", List.of("30"));
         assertThat(rateLimited.response().body().path("error").path("type").asText())
                 .isEqualTo("rate_limit_exceeded");
-        // jev-latest may resolve to nothing at all when the call never reached a model.
+        // 当调用从未到达模型时,jev-latest 可能完全解析不出任何结果。
         assertThat(rateLimited.request().requestedModel()).isEqualTo("jev-latest");
         assertThat(rateLimited.request().resolvedModel()).isNull();
     }

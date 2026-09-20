@@ -13,8 +13,8 @@ import java.util.Set;
 import java.util.regex.Pattern;
 
 /**
- * Merges configuration with fixed precedence: CLI args &gt; env &gt; config.json &gt; defaults.
- * API keys must never appear in config.json — their presence is a {@link ConfigurationError}.
+ * 以固定优先级合并配置：CLI 参数 &gt; 环境变量 &gt; config.json &gt; 默认值。
+ * API 密钥绝不能出现在 config.json 中 —— 一旦出现即为 {@link ConfigurationError}。
  */
 public final class ConfigLoader {
 

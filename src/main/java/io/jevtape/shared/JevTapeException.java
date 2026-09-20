@@ -1,8 +1,8 @@
 package io.jevtape.shared;
 
 /**
- * Root of the explicit JevTape error taxonomy. Abstract so a failure can never be thrown
- * without naming its type; the CLI renders these as a single line instead of a stack trace.
+ * JevTape 显式错误分类体系的根类。声明为抽象类，确保任何失败都必须以明确的类型抛出；
+ * CLI 会将这些错误渲染为单行输出而非堆栈跟踪。
  */
 public abstract class JevTapeException extends RuntimeException {
 

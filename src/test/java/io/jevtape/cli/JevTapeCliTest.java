@@ -18,8 +18,16 @@ class JevTapeCliTest {
     private static final List<String> COMMANDS =
             List.of("record", "replay", "inspect", "verify", "diff", "simulate", "list", "doctor");
 
+    /** 已经落地的命令不在此列 —— 裸跑 `record` 会启动代理并一直阻塞。 */
+    private static final List<String> PLANNED =
+            List.of("replay", "inspect", "verify", "diff", "simulate", "list", "doctor");
+
     private static Stream<String> commands() {
         return COMMANDS.stream();
+    }
+
+    private static Stream<String> planned() {
+        return PLANNED.stream();
     }
 
     private record Result(int exitCode, String out, String err) {}
@@ -61,7 +69,7 @@ class JevTapeCliTest {
     }
 
     @ParameterizedTest
-    @MethodSource("commands")
+    @MethodSource("planned")
     void unimplementedSubcommandsPrintAHintAndFailWithTheirOwnExitCode(String command) {
         Result result = execute(command);
 
@@ -72,7 +80,7 @@ class JevTapeCliTest {
 
     @Test
     void plannedMilestonesComeFromTheRoadmap() {
-        assertThat(execute("record").err()).contains("planned for v0.1.0");
+        assertThat(execute("replay").err()).contains("planned for v0.1.0");
         assertThat(execute("inspect").err()).contains("planned for v0.2.0");
         assertThat(execute("verify").err()).contains("planned for v0.3.0");
         assertThat(execute("diff").err()).contains("planned for v0.4.0");

@@ -17,12 +17,12 @@ import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * Minimal in-process stand-in for the Jev API, so the build never needs network or credentials.
- * Task 11 grows this into the full status matrix the acceptance suite drives.
+ * Jev API 的最小进程内替身,使构建过程完全不依赖网络或凭据。
+ * Task 11 会将其扩展为验收测试套件所驱动的完整状态矩阵。
  */
 public final class FakeJevServer implements AutoCloseable {
 
-    /** One request the fake upstream saw. Header lookup is case-insensitive. */
+    /** 模拟上游收到的一次请求。Header 查找不区分大小写。 */
     public record Received(String method, String path, Map<String, List<String>> headers, byte[] body) {
 
         public String header(String name) {
@@ -49,7 +49,7 @@ public final class FakeJevServer implements AutoCloseable {
         server.start();
     }
 
-    /** Every subsequent request answers with this stub. */
+    /** 之后所有请求都以此为固定应答。 */
     public FakeJevServer stub(int status, Map<String, String> headers, byte[] body) {
         this.status = status;
         this.responseHeaders = Map.copyOf(headers);
@@ -62,7 +62,7 @@ public final class FakeJevServer implements AutoCloseable {
                 jsonBody.getBytes(StandardCharsets.UTF_8));
     }
 
-    /** Answer only after this delay, to exercise upstream timeouts. */
+    /** 延迟指定时长后才应答,用于测试上游超时。 */
     public FakeJevServer delay(Duration delay) {
         this.delay = delay;
         return this;

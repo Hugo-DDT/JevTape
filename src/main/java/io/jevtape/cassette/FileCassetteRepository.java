@@ -20,19 +20,18 @@ import java.util.Objects;
 import java.util.regex.Pattern;
 
 /**
- * Cassettes as {@code <cassetteDir>/<name>.json} (charter §24).
+ * 以 {@code <cassetteDir>/<name>.json} 形式存放 cassette（charter §24）。
  *
- * <p>Output is two-space indented with LF endings and a trailing newline, so a cassette reads like
- * the JSON it is and re-recording one produces a Git diff of what actually changed rather than a
- * whole-file rewrite.
+ * <p>输出采用两空格缩进、LF 行尾并带结尾换行，因此 cassette 读起来就像它本来的 JSON，而重新记录一个
+ * 产生的是实际改动内容的 Git diff，而非整文件重写。
  *
- * <p>The version gate runs on the parsed tree, before binding: a missing {@code schemaVersion} and
- * an unsupported one are both {@link CassetteVersionUnsupported}, and a file that parses but is not
- * a v1 document is {@link CassetteCorrupted} (charter §26, §63).
+ * <p>版本关卡在绑定之前、针对解析出的树运行：缺失的 {@code schemaVersion} 与不受支持的
+ * {@code schemaVersion} 都会抛 {@link CassetteVersionUnsupported}，而能解析却不是 v1 文档的文件会抛
+ * {@link CassetteCorrupted}（charter §26, §63）。
  */
 public final class FileCassetteRepository implements CassetteRepository {
 
-    /** Letters, digits, {@code . _ -} and no leading dot: a name can never escape the directory. */
+    /** 字母、数字、{@code . _ -}，且不以点开头的：名称永远无法逃出该目录。 */
     private static final Pattern SAFE_NAME = Pattern.compile("[A-Za-z0-9][A-Za-z0-9._-]*");
 
     private static final ObjectMapper MAPPER = new ObjectMapper();

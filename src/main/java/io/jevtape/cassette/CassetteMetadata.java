@@ -1,11 +1,10 @@
 package io.jevtape.cassette;
 
 /**
- * When and by what a cassette was recorded (charter §25, §54).
+ * 一个 cassette 是在何时、由什么记录下来的（charter §25, §54）。
  *
- * <p>{@code recordedAt} is an ISO-8601 UTC instant in second precision, e.g.
- * {@code 2026-09-20T10:20:30Z} — the textual form the format promises, kept as text so the file
- * stays readable and sorts lexicographically.
+ * <p>{@code recordedAt} 是精确到秒的 ISO-8601 UTC 时刻，例如 {@code 2026-09-20T10:20:30Z} ——
+ * 这是格式所承诺的文本形式，保留为文本以便文件保持可读并按字典序排序。
  */
 public record CassetteMetadata(String recordedAt, String jevtapeVersion, long durationMs) {
 }

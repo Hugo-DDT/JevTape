@@ -1,6 +1,6 @@
 package io.jevtape.shared;
 
-/** A cassette file exists but cannot be parsed as valid JevTape JSON. */
+/** cassette 文件存在，但无法解析为有效的 JevTape JSON。 */
 public final class CassetteCorrupted extends JevTapeException {
 
     public CassetteCorrupted(String message) {

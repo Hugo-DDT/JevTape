@@ -3,11 +3,11 @@ package io.jevtape.cassette;
 import java.util.Objects;
 
 /**
- * A cassette document: one recorded Jev interaction plus the two fields that identify it on disk,
- * {@code schemaVersion} and {@code name} (charter §22, §25).
+ * 一个 cassette 文档：一次被记录的 Jev interaction，加上在磁盘上标识它的两个字段
+ * {@code schemaVersion} 与 {@code name}（charter §22, §25）。
  *
- * <p>The component order is the field order on disk and part of the published format — reordering
- * them rewrites every committed cassette.
+ * <p>分量的顺序就是磁盘上的字段顺序，且属于已发布格式的一部分 —— 重排它们会重写每一个已提交的
+ * cassette。
  */
 public record Cassette(int schemaVersion,
                        String name,
@@ -16,7 +16,7 @@ public record Cassette(int schemaVersion,
                        RecordedResponse response,
                        Fingerprints fingerprints) {
 
-    /** The version this build writes and the only one it reads (charter §26). */
+    /** 本构建写入的版本，也是它读取的唯一版本（charter §26）。 */
     public static final int SCHEMA_VERSION = 1;
 
     public Cassette {
@@ -27,7 +27,7 @@ public record Cassette(int schemaVersion,
         Objects.requireNonNull(fingerprints, "fingerprints");
     }
 
-    /** Wraps a recorded interaction into a cassette of the current schema version. */
+    /** 把一个被记录的 interaction 包装成当前 schema 版本的一个 cassette。 */
     public static Cassette of(String name, Interaction interaction) {
         Objects.requireNonNull(interaction, "interaction");
         return new Cassette(SCHEMA_VERSION, name, interaction.metadata(), interaction.request(),

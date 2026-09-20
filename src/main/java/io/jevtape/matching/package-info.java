@@ -1,2 +1,2 @@
-/** Strict fingerprint matching decisions; no file I/O in this package. */
+/** 严格的 fingerprint 匹配决策；本包不含文件 I/O。 */
 package io.jevtape.matching;
