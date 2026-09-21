@@ -18,7 +18,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * Jev API 的最小进程内替身,使构建过程完全不依赖网络或凭据。
- * Task 11 会将其扩展为验收测试套件所驱动的完整状态矩阵。
+ * 状态矩阵（200/400/401/429/500/529/非法响应）由 {@link #stub} 驱动,timeout 由 {@link #delay} 驱动 ——
+ * MvpAcceptanceTest 在这两个旋钮上转出完整矩阵。
  */
 public final class FakeJevServer implements AutoCloseable {
 
