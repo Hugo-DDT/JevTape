@@ -18,9 +18,9 @@ class JevTapeCliTest {
     private static final List<String> COMMANDS =
             List.of("record", "replay", "inspect", "verify", "diff", "simulate", "list", "doctor");
 
-    /** 已经落地的命令不在此列 —— 裸跑 `record` / `replay` 会启动代理并一直阻塞，其余命令另有测试。 */
+    /** 已经落地的命令不在此列 —— 裸跑 `record` / `replay` / `simulate` 会启动代理并一直阻塞，其余命令另有测试。 */
     private static final List<String> PLANNED =
-            List.of("diff", "simulate", "doctor");
+            List.of("doctor");
 
     private static Stream<String> commands() {
         return COMMANDS.stream();
@@ -76,13 +76,6 @@ class JevTapeCliTest {
         assertThat(result.exitCode()).isEqualTo(PlannedCommand.EXIT_NOT_IMPLEMENTED);
         assertThat(result.err()).contains("jevtape " + command + " is not implemented yet");
         assertThat(result.out()).isEmpty();
-    }
-
-    @Test
-    void plannedMilestonesComeFromTheRoadmap() {
-        assertThat(execute("diff").err()).contains("planned for v0.4.0");
-        assertThat(execute("simulate").err()).contains("planned for v0.5.0");
-        assertThat(execute("doctor").err()).doesNotContain("planned for");
     }
 
     @Test

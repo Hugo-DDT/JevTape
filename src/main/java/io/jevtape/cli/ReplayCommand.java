@@ -6,7 +6,6 @@ import io.jevtape.config.ConfigLoader;
 import io.jevtape.config.JevTapeConfig;
 import io.jevtape.config.MissPolicy;
 import io.jevtape.matching.MatchResult;
-import io.jevtape.matching.MissDiagnosis;
 import io.jevtape.server.JevProxyServer;
 import io.jevtape.shared.JevTapeVersion;
 import io.jevtape.transport.JevTransport;
@@ -131,40 +130,10 @@ final class ReplayCommand implements Runnable {
         };
     }
 
-    /**
-     * 渲染一个 HIT 或 MISS 块（charter §57），排版与 REC 块对齐。它在代理线程上跑，因此整块输出要原子。
-     *
-     * <p>HIT 里的耗时是**录制那一次**决策的耗时，不是回放耗时 —— 回放不走网络，量它没有信息量。MISS 里逐项
-     * 列出最接近那个 cassette 的对比（charter §32），开发者应当一眼看出是 state 变了、question 变了还是
-     * model 变了；一个候选都没有时没有可比的东西，只留 replay key。
-     */
+    /** HIT / MISS 块的排版与 simulate 共用一份（见 {@link MatchBlock}）；它在代理线程上跑，因此整块输出要原子。 */
     private synchronized void render(MatchResult result, MissPolicy policy) {
-        PrintWriter out = spec.commandLine().getOut();
-        out.println();
-        switch (result) {
-            case MatchResult.Hit hit -> {
-                Cassette cassette = hit.cassette();
-                out.println("HIT  " + cassette.name());
-                out.println("     " + cassette.fingerprints().request());
-                out.println("     " + cassette.metadata().durationMs() + " ms");
-            }
-            case MatchResult.Miss miss -> {
-                out.println("MISS");
-                out.println("     " + miss.requestFingerprint());
-                MissDiagnosis diagnosis = miss.diagnosis();
-                if (diagnosis.closestCassette() != null) {
-                    out.println("     closest   " + diagnosis.closestCassette());
-                    out.println("     state     " + diagnosis.state());
-                    out.println("     contract  " + diagnosis.contract());
-                    out.println("     model     " + diagnosis.model());
-                }
-                if (policy != MissPolicy.ERROR) {
-                    // 联网这件事必须说出来：开发者不该从一片安静的输出里猜"刚刚是不是偷偷请求了线上"。
-                    out.println("     forwarded " + upstream);
-                }
-            }
-        }
-        out.flush();
+        MatchBlock.print(spec.commandLine().getOut(), result,
+                policy == MissPolicy.ERROR ? null : "forwarded " + upstream);
     }
 
     /** {@code --on-miss record} 补录出来的 cassette，用的是与 {@code jevtape record} 完全相同的 REC 块。 */

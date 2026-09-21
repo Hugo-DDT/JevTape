@@ -6,8 +6,4 @@ import picocli.CommandLine.Command;
         mixinStandardHelpOptions = true,
         description = "Diagnose the local JevTape configuration.")
 final class DoctorCommand extends PlannedCommand {
-
-    DoctorCommand() {
-        super(null);
-    }
 }

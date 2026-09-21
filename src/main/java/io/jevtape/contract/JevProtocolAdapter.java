@@ -1,23 +1,30 @@
 package io.jevtape.contract;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.DoubleNode;
 import com.fasterxml.jackson.databind.node.NullNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.TextNode;
+import io.jevtape.shared.CassetteCorrupted;
 import io.jevtape.shared.InvalidJevRequest;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * JevTape 对 System One HTTP 协议的全部理解都集中在这一个类里（charter §69）：server / cli / cassette /
  * matching 都不许自己解析 Jev 字段，因此上游协议变化时只有这里需要改。
  *
  * <p>请求解析失败是显式的 {@link InvalidJevRequest}，不是裸 {@code RuntimeException}；响应则永远解析得动，
- * 因为错误状态码同样属于 tape（charter §54）。这里也是唯一把 JSON 字段翻译成 {@link DecisionContract}
- * 的地方，于是 verify 的比较逻辑不必认识 System One 的字段名。
+ * 因为错误状态码同样属于 tape（charter §54）。这里也是唯一把 JSON 字段翻译成 {@link DecisionContract} 与
+ * {@link DecisionAnswers} 的地方，于是 verify / diff 的比较逻辑不必认识 System One 的字段名；simulate 往
+ * 应答里写覆盖也走这里，因此"字段叫什么"这件事在整个工程里只有一份。
  */
 public final class JevProtocolAdapter {
 
@@ -156,6 +163,123 @@ public final class JevProtocolAdapter {
     /** 应答里的 token 用量子树（{@code usage}）。没有时是 JSON null。 */
     public static JsonNode tokens(JsonNode body) {
         return field(body, "usage");
+    }
+
+    /**
+     * 把应答里的 {@code answers} 解析成 {@link DecisionAnswers}（charter §17, §19），diff 用它逐项比较两盘
+     * 磁带答了什么。没有作答（4xx/5xx 的应答通常没有）时是 {@link DecisionAnswers#NONE} —— 比一盘录了错误
+     * 状态码的磁带不该失败，它只是没有答案可比。
+     */
+    public static DecisionAnswers decisionAnswers(JsonNode body) {
+        JsonNode answers = field(body, "answers");
+        if (!answers.isObject()) {
+            return DecisionAnswers.NONE;
+        }
+        List<DecisionAnswers.Answer> result = new ArrayList<>();
+        answers.properties().forEach(entry -> result.add(answer(entry.getKey(), entry.getValue())));
+        return new DecisionAnswers(result);
+    }
+
+    /**
+     * 一个 question 的答案：概率分布单独成表（于是 diff 能按选项对齐），其余字段全部留在 {@code scalars}
+     * 里。不是 object 的答案（上游只回了一个字符串之类）退化成一项 {@code value}，内容不丢。
+     */
+    private static DecisionAnswers.Answer answer(String name, JsonNode node) {
+        if (!node.isObject()) {
+            return new DecisionAnswers.Answer(name, Map.of(), Map.of("value", display(node)));
+        }
+        Map<String, String> probabilities = new LinkedHashMap<>();
+        Map<String, String> scalars = new LinkedHashMap<>();
+        node.properties().forEach(entry -> {
+            JsonNode value = entry.getValue();
+            if (entry.getKey().equals("probabilities") && value.isObject()) {
+                value.properties().forEach(option -> probabilities.put(option.getKey(), display(option.getValue())));
+            } else {
+                scalars.put(entry.getKey(), display(value));
+            }
+        });
+        return new DecisionAnswers.Answer(name, probabilities, scalars);
+    }
+
+    /**
+     * 这些覆盖落不落得到这份应答上：{@code question} 存在（若指定了），且至少有一个待覆盖的字段确实存在。
+     * simulate 在启动时问一次，于是"--confidence 写了却什么都没改"是一行错误，而不是半小时的调试。
+     */
+    public static boolean canOverride(JsonNode body, AnswerOverrides overrides) {
+        return !targets(body, overrides).isEmpty();
+    }
+
+    /**
+     * 把覆盖写进应答 body，返回改写后的字节；没有任何可写的目标时返回原件，于是不做覆盖的 simulate 与
+     * replay 给出的是逐字节相同的响应。
+     *
+     * <p>认不出来的 body（空 body、中间设备的 HTML 错误页）同样原样返回：那里没有作答可覆盖，把它换成一份
+     * 编造的 JSON 只会让客户端去解析一个上游从来不会回的东西。
+     *
+     * @throws CassetteCorrupted 当磁带里的 body 是一棵写不回字节的 JSON 树
+     */
+    public static byte[] overrideAnswers(byte[] body, AnswerOverrides overrides) {
+        if (overrides.empty()) {
+            return body;
+        }
+        JsonNode root = tryParse(body);
+        if (root == null || !root.isObject()) {
+            return body;
+        }
+        List<Target> targets = targets(root, overrides);
+        if (targets.isEmpty()) {
+            return body;
+        }
+        targets.forEach(target -> target.answer().set(target.field(), target.value()));
+        try {
+            return MAPPER.writeValueAsBytes(root);
+        } catch (JsonProcessingException e) {
+            throw new CassetteCorrupted("Cassette holds a response body that cannot be written back as JSON", e);
+        }
+    }
+
+    /**
+     * 要写的那些 {@code (答案节点, 字段名, 新值)}。只收**已经存在**的字段：给一个 Score 的答案凭空加一个
+     * confidence，测出来的就不是应用的边界而是它对假响应的解析。
+     */
+    private static List<Target> targets(JsonNode body, AnswerOverrides overrides) {
+        List<Target> result = new ArrayList<>();
+        if (overrides.empty() || body == null) {
+            return result;
+        }
+        JsonNode answers = field(body, "answers");
+        if (!answers.isObject()) {
+            return result;
+        }
+        answers.properties().forEach(entry -> {
+            if (overrides.question() != null && !overrides.question().equals(entry.getKey())) {
+                return;
+            }
+            if (entry.getValue() instanceof ObjectNode node) {
+                target(result, node, "confidence", overrides.confidence());
+                target(result, node, "choice", overrides.choice());
+                target(result, node, "score", overrides.score());
+                target(result, node, "probability", overrides.probability());
+            }
+        });
+        return result;
+    }
+
+    private static void target(List<Target> sink, ObjectNode answer, String field, Object value) {
+        if (value != null && answer.has(field)) {
+            sink.add(new Target(answer, field, value instanceof Double number
+                    ? DoubleNode.valueOf(number)
+                    : TextNode.valueOf(value.toString())));
+        }
+    }
+
+    /** 一处待写入的覆盖。 */
+    private record Target(ObjectNode answer, String field, JsonNode value) {
+    }
+
+    /** 标量取文本，容器取紧凑 JSON —— 于是任何字段都留在比较里，不会因为"不认识"而被丢掉。 */
+    private static String display(JsonNode node) {
+        return node.isValueNode() ? node.asText() : node.toString();
     }
 
     /** 解析不出来时返回 null，由调用方决定是报错还是退化。 */
