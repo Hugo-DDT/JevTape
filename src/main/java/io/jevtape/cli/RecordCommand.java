@@ -31,8 +31,6 @@ import java.util.Map;
         description = "Record Jev decisions into a cassette.")
 final class RecordCommand implements Runnable {
 
-    private static final Path DEFAULT_CONFIG_FILE = Path.of(".jevtape", "config.json");
-
     @Spec
     private CommandSpec spec;
 
@@ -62,7 +60,7 @@ final class RecordCommand implements Runnable {
     @Override
     public void run() {
         JevTapeConfig config = new ConfigLoader().load(cliOverrides(), System.getenv(),
-                configFile == null ? DEFAULT_CONFIG_FILE : configFile);
+                configFile == null ? ConfigLoader.DEFAULT_FILE : configFile);
         Path cassettes = Path.of(config.cassetteDir());
         RecordingJevTransport transport = new RecordingJevTransport(
                 new LiveJevTransport(upstream, LiveJevTransport.DEFAULT_TIMEOUT),

@@ -42,8 +42,6 @@ import java.util.Map;
         description = "Replay recorded Jev decisions from cassettes; offline unless --on-miss asks for the live API.")
 final class ReplayCommand implements Runnable {
 
-    private static final Path DEFAULT_CONFIG_FILE = Path.of(".jevtape", "config.json");
-
     @Spec
     private CommandSpec spec;
 
@@ -78,7 +76,7 @@ final class ReplayCommand implements Runnable {
     @Override
     public void run() {
         JevTapeConfig config = new ConfigLoader().load(cliOverrides(), System.getenv(),
-                configFile == null ? DEFAULT_CONFIG_FILE : configFile);
+                configFile == null ? ConfigLoader.DEFAULT_FILE : configFile);
         Path cassettes = Path.of(config.cassetteDir());
         List<Cassette> loaded = new FileCassetteRepository(cassettes).loadAll();
 

@@ -18,9 +18,9 @@ class JevTapeCliTest {
     private static final List<String> COMMANDS =
             List.of("record", "replay", "inspect", "verify", "diff", "simulate", "list", "doctor");
 
-    /** 已经落地的命令不在此列 —— 裸跑 `record` / `replay` 会启动代理并一直阻塞。 */
+    /** 已经落地的命令不在此列 —— 裸跑 `record` / `replay` 会启动代理并一直阻塞，`inspect` / `list` 另有测试。 */
     private static final List<String> PLANNED =
-            List.of("inspect", "verify", "diff", "simulate", "list", "doctor");
+            List.of("verify", "diff", "simulate", "doctor");
 
     private static Stream<String> commands() {
         return COMMANDS.stream();
@@ -80,7 +80,6 @@ class JevTapeCliTest {
 
     @Test
     void plannedMilestonesComeFromTheRoadmap() {
-        assertThat(execute("inspect").err()).contains("planned for v0.2.0");
         assertThat(execute("verify").err()).contains("planned for v0.3.0");
         assertThat(execute("diff").err()).contains("planned for v0.4.0");
         assertThat(execute("simulate").err()).contains("planned for v0.5.0");

@@ -38,6 +38,15 @@ public final class JevProtocolAdapter {
     public record Response(JsonNode body, String resolvedModel) {
     }
 
+    /**
+     * 一个 question 的名字与类型（Choice / Score / Noul）。类型认不出来时是 {@code Question}。
+     *
+     * <p>这只是渲染要用的两个字段，不是 Choice / Score / Noul 的领域模型 —— 那是 Decision Contract
+     * 的事（charter §18）。
+     */
+    public record Question(String name, String type) {
+    }
+
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
     private JevProtocolAdapter() {
@@ -74,19 +83,29 @@ public final class JevProtocolAdapter {
     }
 
     /**
-     * 每个 question 一行 {@code <type> <name>}，保持请求里的原有顺序，供 CLI 渲染 REC 输出
-     * （charter §56）。{@code questions} 不是 object 时返回空列表。
+     * 按请求里的原有顺序列出每个 question（charter §17, §56）。渲染成什么样子由调用方决定：REC 块打
+     * {@code <type> <name>}，inspect 打对齐的两列。{@code questions} 不是 object 时返回空列表。
      */
-    public static List<String> questionSummaries(JsonNode questions) {
+    public static List<Question> questions(JsonNode questions) {
         if (questions == null || !questions.isObject()) {
             return List.of();
         }
-        List<String> lines = new ArrayList<>();
+        List<Question> result = new ArrayList<>();
         questions.properties().forEach(entry -> {
             JsonNode type = entry.getValue().get("type");
-            lines.add((type != null && type.isTextual() ? type.asText() : "Question") + " " + entry.getKey());
+            result.add(new Question(entry.getKey(), type != null && type.isTextual() ? type.asText() : "Question"));
         });
-        return lines;
+        return result;
+    }
+
+    /** 应答里的作答子树（{@code answers}）。没有时是 JSON null —— 4xx/5xx 的应答通常没有。 */
+    public static JsonNode answers(JsonNode body) {
+        return field(body, "answers");
+    }
+
+    /** 应答里的 token 用量子树（{@code usage}）。没有时是 JSON null。 */
+    public static JsonNode tokens(JsonNode body) {
+        return field(body, "usage");
     }
 
     /** 解析不出来时返回 null，由调用方决定是报错还是退化。 */

@@ -18,6 +18,9 @@ import java.util.regex.Pattern;
  */
 public final class ConfigLoader {
 
+    /** 用户没有写 {@code --config} 时读取的位置（charter §48）。 */
+    public static final Path DEFAULT_FILE = Path.of(".jevtape", "config.json");
+
     private static final Pattern SECRET_FIELD =
             Pattern.compile("(?i).*(api[_-]?key|token|secret|password|authorization|cookie).*");
     private static final Set<String> MATCH_POLICIES = Set.of("strict");

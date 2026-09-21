@@ -20,8 +20,8 @@ final class RecBlock {
     static void print(PrintWriter out, Path cassettes, Cassette cassette) {
         out.println();
         out.println("REC  " + cassette.name());
-        for (String question : JevProtocolAdapter.questionSummaries(cassette.request().questions())) {
-            out.println("     " + question);
+        for (JevProtocolAdapter.Question question : JevProtocolAdapter.questions(cassette.request().questions())) {
+            out.println("     " + question.type() + " " + question.name());
         }
         out.println();
         String model = cassette.request().resolvedModel() != null
