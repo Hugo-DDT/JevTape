@@ -6,7 +6,7 @@
 
     <groupId>io.jevtape</groupId>
     <artifactId>jevtape</artifactId>
-    <version>0.1.0-SNAPSHOT</version>
+    <version>0.1.0</version>
 
     <properties>
         <maven.compiler.release>21</maven.compiler.release>
