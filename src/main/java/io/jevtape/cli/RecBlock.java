@@ -1,6 +1,7 @@
 package io.jevtape.cli;
 
 import io.jevtape.cassette.Cassette;
+import io.jevtape.contract.DecisionContract;
 import io.jevtape.contract.JevProtocolAdapter;
 
 import java.io.PrintWriter;
@@ -20,7 +21,7 @@ final class RecBlock {
     static void print(PrintWriter out, Path cassettes, Cassette cassette) {
         out.println();
         out.println("REC  " + cassette.name());
-        for (JevProtocolAdapter.Question question : JevProtocolAdapter.questions(cassette.request().questions())) {
+        for (DecisionContract.Question question : JevProtocolAdapter.questions(cassette.request().questions())) {
             out.println("     " + question.type() + " " + question.name());
         }
         out.println();

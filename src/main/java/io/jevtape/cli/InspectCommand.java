@@ -20,21 +20,21 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
+import static io.jevtape.cli.Report.Line;
+import static io.jevtape.cli.Report.section;
+
 /**
  * {@code jevtape inspect <name>}：不打开 JSON 也能知道一盘磁带里录了什么（charter §17）—— Model、状态、
  * 延迟、Questions、Answers 与 Tokens。
  *
  * <p>这一层只做参数解析与渲染：装载交给 {@link FileCassetteRepository}，Jev 字段的取值交给
- * {@link JevProtocolAdapter}，因此这里不出现任何 System One 的字段名。渲染按节进行，一节里没有可打印的
- * 行时整节省略，于是 4xx/5xx 的磁带不会摆出空的 Answers 与 Tokens。
+ * {@link JevProtocolAdapter}，因此这里不出现任何 System One 的字段名。渲染按节进行（{@link Report}），
+ * 一节里没有可打印的行时整节省略，于是 4xx/5xx 的磁带不会摆出空的 Answers 与 Tokens。
  */
 @Command(name = "inspect",
         mixinStandardHelpOptions = true,
         description = "Show what a cassette recorded without opening the JSON.")
 final class InspectCommand implements Runnable {
-
-    /** 分节横线（charter §17）。 */
-    private static final String RULE = "─".repeat(29);
 
     @Spec
     private CommandSpec spec;
@@ -111,24 +111,6 @@ final class InspectCommand implements Runnable {
         });
     }
 
-    /** 一节内容：标题、横线、按最长标签对齐的行。没有行的节整节不出现，节与节之间空一行。 */
-    private static void section(List<String> output, String title, List<Line> lines) {
-        List<Line> rows = new ArrayList<>(lines);
-        while (!rows.isEmpty() && rows.getLast().blank()) {
-            rows.removeLast();
-        }
-        if (rows.isEmpty()) {
-            return;
-        }
-        if (!output.isEmpty()) {
-            output.add("");
-        }
-        output.add(title);
-        output.add(RULE);
-        int width = rows.stream().mapToInt(Line::labelLength).max().orElse(0) + 2;
-        rows.forEach(row -> output.add(row.render(width)));
-    }
-
     /** CLI 参数只把用户真的写了的那些交给配置合并，其余层级照常生效。 */
     private Map<String, String> cliOverrides() {
         Map<String, String> cli = new HashMap<>();
@@ -136,29 +118,5 @@ final class InspectCommand implements Runnable {
             cli.put("cassetteDir", cassetteDir);
         }
         return cli;
-    }
-
-    /**
-     * 一行键值输出。{@code label} 为 null 是空行；{@code value} 为 null 是只有名字的分组标题
-     * （Answers 一节里的 question 名）。
-     */
-    private record Line(String label, String value) {
-
-        static final Line BLANK = new Line(null, null);
-
-        boolean blank() {
-            return label == null;
-        }
-
-        int labelLength() {
-            return blank() ? 0 : label.length();
-        }
-
-        String render(int width) {
-            if (blank()) {
-                return "";
-            }
-            return value == null ? label : String.format("%-" + width + "s%s", label, value);
-        }
     }
 }

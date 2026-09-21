@@ -1,5 +1,6 @@
 package io.jevtape.fingerprint;
 
+import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.jevtape.cassette.Fingerprints;
@@ -35,7 +36,7 @@ public final class FingerprintEngine {
 
     public static Fingerprints of(String method, String path, JevProtocolAdapter.Decision decision) {
         String state = sha256(CanonicalJson.of(decision.state()));
-        String contract = sha256(CanonicalJson.of(decision.questions()));
+        String contract = contract(decision.questions());
         ObjectNode source = JsonNodeFactory.instance.objectNode()
                 .put("method", method)
                 .put("model", decision.requestedModel())
@@ -43,6 +44,14 @@ public final class FingerprintEngine {
                 .put("state", state)
                 .put("contract", contract);
         return new Fingerprints(sha256(CanonicalJson.of(source)), contract, state);
+    }
+
+    /**
+     * contract 指纹单独可用：verify 要为一份还没发出的请求算出它，再与 cassette 里存的那一个比
+     * （charter §18, §28）。
+     */
+    public static String contract(JsonNode questions) {
+        return sha256(CanonicalJson.of(questions));
     }
 
     /**

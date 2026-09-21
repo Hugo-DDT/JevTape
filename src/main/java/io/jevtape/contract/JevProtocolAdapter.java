@@ -15,9 +15,9 @@ import java.util.List;
  * JevTape 对 System One HTTP 协议的全部理解都集中在这一个类里（charter §69）：server / cli / cassette /
  * matching 都不许自己解析 Jev 字段，因此上游协议变化时只有这里需要改。
  *
- * <p>第一阶段只做字段提取，不建立 Choice / Score / Noul 的领域模型 —— Decision Contract 是后续版本的事。
- * 请求解析失败是显式的 {@link InvalidJevRequest}，不是裸 {@code RuntimeException}；响应则永远解析得动，
- * 因为错误状态码同样属于 tape（charter §54）。
+ * <p>请求解析失败是显式的 {@link InvalidJevRequest}，不是裸 {@code RuntimeException}；响应则永远解析得动，
+ * 因为错误状态码同样属于 tape（charter §54）。这里也是唯一把 JSON 字段翻译成 {@link DecisionContract}
+ * 的地方，于是 verify 的比较逻辑不必认识 System One 的字段名。
  */
 public final class JevProtocolAdapter {
 
@@ -36,15 +36,6 @@ public final class JevProtocolAdapter {
      * <p>{@code resolvedModel} 在无法确定时为 null —— 4xx/5xx 的响应体里通常没有它（charter §34）。
      */
     public record Response(JsonNode body, String resolvedModel) {
-    }
-
-    /**
-     * 一个 question 的名字与类型（Choice / Score / Noul）。类型认不出来时是 {@code Question}。
-     *
-     * <p>这只是渲染要用的两个字段，不是 Choice / Score / Noul 的领域模型 —— 那是 Decision Contract
-     * 的事（charter §18）。
-     */
-    public record Question(String name, String type) {
     }
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
@@ -84,18 +75,77 @@ public final class JevProtocolAdapter {
 
     /**
      * 按请求里的原有顺序列出每个 question（charter §17, §56）。渲染成什么样子由调用方决定：REC 块打
-     * {@code <type> <name>}，inspect 打对齐的两列。{@code questions} 不是 object 时返回空列表。
+     * {@code <type> <name>}，inspect 打对齐的两列。{@code questions} 不是 object 时返回空列表 —— 渲染一份
+     * 没有 question 的磁带不该失败。
      */
-    public static List<Question> questions(JsonNode questions) {
+    public static List<DecisionContract.Question> questions(JsonNode questions) {
+        return questions == null || !questions.isObject() ? List.of() : parseQuestions(questions);
+    }
+
+    /**
+     * 把 {@code questions} 解析成 Decision Contract（charter §18, §44），verify 用它逐项比较。record / replay
+     * 不走这里：指纹只认 canonical JSON，不需要领域模型。
+     *
+     * @throws InvalidJevRequest 当 {@code questions} 不是一个 object —— 那就无从谈起契约
+     */
+    public static DecisionContract decisionContract(JsonNode questions) {
         if (questions == null || !questions.isObject()) {
+            throw new InvalidJevRequest("A Decision Contract needs a 'questions' object"
+                    + (questions == null ? ", but there is none" : ", got: " + questions.getNodeType()));
+        }
+        return new DecisionContract(parseQuestions(questions));
+    }
+
+    private static List<DecisionContract.Question> parseQuestions(JsonNode questions) {
+        List<DecisionContract.Question> result = new ArrayList<>();
+        questions.properties().forEach(entry -> result.add(question(entry.getKey(), entry.getValue())));
+        return result;
+    }
+
+    /**
+     * 三种 question 归一成同一种形状（charter §28 列的正是这些内容）：Choice 读 {@code options[].value} 与
+     * 其 {@code criteria}，Score 读 {@code levels[].score} 与其 {@code criteria}，Noul 只有一条
+     * {@code criteria}（因此标签是空串）。认不出来的类型没有可比的结构，只留下名字与类型 —— 它若真的变了，
+     * contract fingerprint 会说话。
+     */
+    private static DecisionContract.Question question(String name, JsonNode node) {
+        JsonNode type = node.get("type");
+        String questionType = type != null && type.isTextual() ? type.asText() : "Question";
+        List<DecisionContract.Criterion> criteria = switch (questionType) {
+            case "Choice" -> parseCriteria(node.get("options"), "value");
+            case "Score" -> parseCriteria(node.get("levels"), "score");
+            case "Noul" -> node.path("criteria").isValueNode()
+                    ? List.of(new DecisionContract.Criterion("", text(node.get("criteria"))))
+                    : List.of();
+            default -> List.of();
+        };
+        return new DecisionContract.Question(name, questionType, criteriaNoun(questionType),
+                text(node.get("instructions")), criteria);
+    }
+
+    private static List<DecisionContract.Criterion> parseCriteria(JsonNode array, String labelField) {
+        if (array == null || !array.isArray()) {
             return List.of();
         }
-        List<Question> result = new ArrayList<>();
-        questions.properties().forEach(entry -> {
-            JsonNode type = entry.getValue().get("type");
-            result.add(new Question(entry.getKey(), type != null && type.isTextual() ? type.asText() : "Question"));
-        });
+        List<DecisionContract.Criterion> result = new ArrayList<>();
+        for (JsonNode item : array) {
+            result.add(new DecisionContract.Criterion(label(item.get(labelField)), text(item.get("criteria"))));
+        }
         return result;
+    }
+
+    /** 可选项在诊断里叫什么，是 Jev 的知识，因此在这里定下来而不是留给渲染的一方去猜。 */
+    private static String criteriaNoun(String questionType) {
+        return switch (questionType) {
+            case "Choice" -> "option";
+            case "Score" -> "level";
+            default -> "criteria";
+        };
+    }
+
+    /** 标签既可能是字符串（Choice 的 value）也可能是数字（Score 的 score）；缺失时是空串。 */
+    private static String label(JsonNode node) {
+        return node == null || node.isNull() || !node.isValueNode() ? "" : node.asText();
     }
 
     /** 应答里的作答子树（{@code answers}）。没有时是 JSON null —— 4xx/5xx 的应答通常没有。 */

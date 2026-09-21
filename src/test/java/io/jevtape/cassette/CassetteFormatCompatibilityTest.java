@@ -2,6 +2,8 @@ package io.jevtape.cassette;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import io.jevtape.contract.JevProtocolAdapter;
+import io.jevtape.fingerprint.FingerprintEngine;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -66,6 +68,21 @@ class CassetteFormatCompatibilityTest {
             assertThat(Files.readAllBytes(dir.resolve(fixture.getFileName())))
                     .as("%s stays byte-identical", fixture.getFileName())
                     .isEqualTo(Files.readAllBytes(fixture));
+        }
+    }
+
+    /** 指纹必须是它自己内容的真实哈希:手写的假值会让 {@code jevtape verify} 对同一份请求也判 FAIL。 */
+    @Test
+    void everyCommittedFingerprintIsTheOneThisBuildComputes() throws IOException {
+        for (Path fixture : fixtures()) {
+            Cassette cassette = new FileCassetteRepository(FIXTURES).read(name(fixture));
+            RecordedRequest request = cassette.request();
+
+            assertThat(cassette.fingerprints())
+                    .as("%s carries its own real fingerprints", fixture.getFileName())
+                    .isEqualTo(FingerprintEngine.of(request.method(), request.path(),
+                            new JevProtocolAdapter.Decision(request.requestedModel(), request.state(),
+                                    request.questions())));
         }
     }
 

@@ -100,8 +100,8 @@
     }
   },
   "fingerprints" : {
-    "request" : "sha256:9f2c1d4b7a6e58403c1f0a9b8d7e6f514032918a7b6c5d4e3f2019a8b7c6d5e4",
-    "contract" : "sha256:4b7e2a91c0d3f68517a4e9c2b0d8f1357ae6c49b2d0f81376ae5c9b4d2f07a18",
-    "state" : "sha256:c1a90f3e7b5d24816c0ae97d43b18f6052cd9a417be06f3d18c5a29e40b7f613"
+    "request" : "sha256:35062413f2c1bbeec59705cb1710b18f9c70336f4f4db6f06b69cf1390b63d7d",
+    "contract" : "sha256:3ff0c48f09d2143a76c24a0c0cbed14cdd8bf26dc24037df363154888af7c431",
+    "state" : "sha256:b8f6103aa0fec90c4ce91c1f434ae63e1c05814a1f2733249ea9f3fdf495a469"
   }
 }
