@@ -1,10 +1,12 @@
 # JevTape
 
+[中文](README.zh-CN.md) | **English**
+
 > **Record Jev once. Replay it forever.**
 
-JevTape 是一个面向 Jev 应用开发者的轻量级 **Record / Replay / Inspect** 工具。
+JevTape is a lightweight **Record / Replay / Inspect** tool for developers of Jev applications.
 
-它录制真实 Jev 决策（Decision），在本地开发、测试和 CI 中以确定性方式重放 —— 无需 API Key、无需网络、无需真实调用模型。
+It records real Jev decisions and replays them deterministically in local development, tests, and CI — no API key, no network, no live calls to the model.
 
 ```text
 Application
@@ -15,10 +17,10 @@ JevTape ──── Record ────► Jev API
     └──── Replay ────► Local Cassette
 ```
 
-## 快速上手
+## Quick start
 
 ```bash
-# 第一次：录制真实 Jev 决策
+# First time: record real Jev decisions
 $ jevtape record
 
 JevTape RECORD
@@ -30,7 +32,7 @@ REC issue-routing
 ```
 
 ```bash
-# 之后：离线重放
+# After that: replay offline
 $ jevtape replay
 
 JevTape REPLAY
@@ -47,40 +49,40 @@ MISS
     model     MATCH
 ```
 
-Miss 的诊断直接指出是哪一部分变了：上面这一次是 Question（Decision Contract）改了，而 State 与 Model 都没动。
+The miss diagnosis points straight at what changed: above, the Question (Decision Contract) changed while State and Model stayed the same.
 
-将 `.jevtape/cassettes` 提交进 Git，CI 中即可在无 API Key、无网络的环境下运行全部 Jev 相关测试。
+Commit `.jevtape/cassettes` to Git, and every Jev-related test runs in CI with no API key and no network.
 
-## 为什么不是普通的 HTTP VCR
+## Why not just another HTTP VCR
 
-JevTape 记录的不只是 HTTP Response，而是完整的 **决策上下文**：
+JevTape records more than HTTP responses — it records the full **decision context**:
 
-- Jev 输入 State
-- Question 定义与类型（Choice / Score / Noul）
-- Choice Criteria、Score Levels、Noul Criteria
-- Model、Probability、Confidence、Usage
-- **Decision Contract Fingerprint**
+- Jev input State
+- Question definitions and types (Choice / Score / Noul)
+- Choice criteria, Score levels, Noul criteria
+- Model, Probability, Confidence, Usage
+- **Decision Contract fingerprint**
 
-因此 JevTape 能回答普通 VCR 回答不了的问题：
+So JevTape can answer a question a plain VCR cannot:
 
-> “现在代码里的 Jev 决策契约，是否还是录制这份结果时的那个决策契约？”
+> "Is the Jev decision contract in my code right now still the contract this recording was made under?"
 
-当你给 Question 增加一个选项、修改了 criteria 时，旧 Cassette 会立刻产生 Replay Miss，而不是静默地返回一个已经不代表当前契约的结果。
+When you add an option to a Question or edit its criteria, the old cassette produces a replay miss immediately — instead of silently returning a result that no longer represents the current contract.
 
-## 核心命令
+## Core commands
 
-| 命令 | 说明 | 状态 |
+| Command | Description | Status |
 |---|---|---|
-| `jevtape record` | 录制真实 Jev 请求与响应为本地 Cassette | MVP |
-| `jevtape replay` | 从 Cassette 确定性重放，默认离线 | MVP |
-| `jevtape inspect` | 不打开 JSON 即可查看 Cassette 内容 | MVP |
-| `jevtape verify` | 校验当前 Decision Contract 与录制契约是否一致 | 规划中 |
-| `jevtape diff` | 比较两份 Cassette 的决策差异 | 规划中 |
-| `jevtape simulate` | 模拟低置信度、超时、429/500 等边界场景 | 规划中 |
+| `jevtape record` | Record real Jev requests and responses into local cassettes | MVP |
+| `jevtape replay` | Deterministic replay from cassettes, offline by default | MVP |
+| `jevtape inspect` | View cassette contents without opening the JSON | MVP |
+| `jevtape verify` | Check the current Decision Contract against the recorded one | v0.3.0 |
+| `jevtape diff` | Compare the decision differences between two cassettes | v0.4.0 |
+| `jevtape simulate` | Simulate edge cases: low confidence, timeouts, 429/500 | v0.5.0 |
 
-## 配置
+## Configuration
 
-配置文件 `.jevtape/config.json`：
+Config file `.jevtape/config.json`:
 
 ```json
 {
@@ -92,28 +94,28 @@ JevTape 记录的不只是 HTTP Response，而是完整的 **决策上下文**�
 }
 ```
 
-配置优先级：`CLI 参数 > 环境变量 > .jevtape/config.json > 默认值`。
+Config precedence: `CLI args > environment variables > .jevtape/config.json > defaults`.
 
-`onMiss` 决定磁带里没有答案时怎么办：`error`（默认，返回 `JEVTAPE_REPLAY_MISS`）、`live`（转发真实 Jev，但不保存）、`record`（转发并补录成新 Cassette）。后两者会联网，必须显式启用 —— `jevtape replay --on-miss live`。
+`onMiss` decides what happens when no cassette holds the answer: `error` (default, returns `JEVTAPE_REPLAY_MISS`), `live` (forwards to the real Jev API but saves nothing), `record` (forwards and records the miss into a new cassette). The latter two touch the network and must be enabled explicitly — `jevtape replay --on-miss live`.
 
-API Key 通过环境变量提供，**绝不写入配置文件或 Cassette**。
+API keys come from environment variables and are **never written to the config file or to cassettes**.
 
-## 核心不变量
+## Core invariants
 
-无论版本如何演进，JevTape 始终保证：
+Whatever the version, JevTape always guarantees:
 
-1. Replay 可以完全离线运行；
-2. Replay 默认绝不访问线上 API；
-3. Cassette 可读、可版本控制（Git Diff 友好）；
-4. 认证信息绝不写入 Cassette；
-5. 默认匹配是确定性的（strict fingerprint）；
-6. 核心不依赖具体语言 SDK（工作在 HTTP 协议层）；
-7. JevTape 不发展成 AI Platform；
-8. 每一个新增功能必须服务于 Jev 开发、测试或决策契约管理。
+1. Replay runs fully offline;
+2. Replay never hits the live API by default;
+3. Cassettes are human-readable and version-controlled (Git-diff friendly);
+4. Credentials are never written into cassettes;
+5. Default matching is deterministic (strict fingerprint);
+6. The core does not depend on any language-specific SDK — it works at the HTTP protocol layer;
+7. JevTape will not evolve into an AI platform;
+8. Every added feature must serve Jev development, testing, or decision contract management.
 
-## 项目定位
+## Positioning
 
-JevTape 是一个**小工具，不是平台**：
+JevTape is **a small tool, not a platform**:
 
 ```text
 JUnit          → Java Test
@@ -123,16 +125,16 @@ VCR            → HTTP Record/Replay
 JevTape        → Jev Decision Record/Replay
 ```
 
-它**不是**：Jev SDK、Playground、Benchmark 平台、Calibration 平台、Observability 平台、代理网关。
+It is **not**: a Jev SDK, a playground, a benchmark platform, a calibration platform, an observability platform, or a proxy gateway.
 
-## 开发
+## Development
 
 ```bash
-mvn verify   # 全部测试，不需要 API Key，不需要网络
+mvn verify   # the full test suite — no API key, no network required
 ```
 
-项目测试通过内部 `FakeJevServer` 模拟上游，永远不需要真实 Jev 凭证。
+Tests simulate the upstream with the internal `FakeJevServer`; real Jev credentials are never needed.
 
-## 许可证
+## License
 
-[Apache License 2.0](LICENSE)
+Apache License 2.0 ([LICENSE](LICENSE)).
