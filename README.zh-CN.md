@@ -59,7 +59,7 @@ JevTape 记录的不只是 HTTP Response，而是完整的 **决策上下文**�
 
 - Jev 输入 State
 - Question 定义与类型（Choice / Score / Noul）
-- Choice Criteria、Score Levels、Noul Criteria
+- 每类 Question 的 Criteria（选项 map、有序的 Score 等级、true/false 规则）
 - Model、Probability、Confidence、Usage
 - **Decision Contract Fingerprint**
 

@@ -1,12 +1,13 @@
 package io.jevtape.contract;
 
 import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
+import com.fasterxml.jackson.databind.node.JsonNodeFactory;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.jevtape.contract.DecisionContract.Criterion;
 import io.jevtape.contract.DecisionContract.Question;
 import io.jevtape.fingerprint.FingerprintEngine;
 import io.jevtape.testing.JevProtocolFixtures;
-import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.nio.charset.StandardCharsets;
@@ -17,17 +18,18 @@ import static org.assertj.core.api.Assertions.assertThat;
 /**
  * 官方 System One 协议样例（{@code fixtures/jev-protocol}）上的回归网。
  *
- * <p>前半部分**现在就跑**：它检查这批样例本身，确认 S01 要求的形状（小写 type、Choice 的 criteria map、
- * Score 的 criteria array、Noul 的 criteria object 与 noul 应答、结构化 instructions、四个错误状态码）真的
- * 都在，于是后面那些断言不会因样例写错而空转。
- *
- * <p>后半部分是审查里复现的 F01：v0.5.0 的 {@link JevProtocolAdapter} 只认大写 {@code Choice} /
+ * <p>前半部分是审查里复现的 F01：v0.5.0 的 {@link JevProtocolAdapter} 只认大写 {@code Choice} /
  * {@code Score} / {@code Noul} 与 {@code options[]} / {@code levels[]}，因此官方小写形状的 criteria 一律
- * 解析为空 —— 契约看不见任何可选项，{@code --probability} 也落不到官方的 {@code noul} 字段上。这些用例带
- * {@code @Disabled} 并在理由里注明所属修复任务：S02 落地时连同实现一起打开，主分支上不留长期失败的测试。
+ * 解析为空 —— 契约看不见任何可选项，{@code --probability} 也落不到官方的 {@code noul} 字段上。S02 之后官方
+ * 形状是主路径，大写形状退为历史兼容分支，那一半由 {@link ContractDiffTest} 与 {@code fixtures/cassette-v1}
+ * 上的断言守着。
  *
- * <p>打开它们的那个 PR 还要改 {@code docs/matching.md}：verify 一节与文末"必须覆盖的测试断言"都写着
- * "Noul 只有一条 criteria（没有标签）"，那是旧协议的语义，与下面的
+ * <p>后半部分检查这批样例本身，确认 S01 要求的形状（小写 type、Choice 的 criteria map、Score 的 criteria
+ * array、Noul 的 criteria object 与 noul 应答、结构化 instructions、四个错误状态码）真的都在，于是前面那些
+ * 断言不会因样例写错而空转。
+ *
+ * <p>{@code docs/matching.md} 的 verify 一节与文末"必须覆盖的测试断言"随 S02 一起改成官方形状：旧文档写着
+ * "Noul 只有一条 criteria（没有标签）"、"Score 的等级在 {@code levels[]}"，那是 v1 的语义，与下面的
  * {@link #noulRulesComeFromTheOfficialTrueFalseObject} 直接冲突（官方 Noul 是 {@code true} / {@code false}
  * 两条**有标签**的规则）。AGENTS.md 把那份清单当验收权威，因此实现与文档必须在同一次改动里对齐。
  */
@@ -35,7 +37,6 @@ class OfficialProtocolTest {
 
     /** 官方 Choice 的 criteria 是一个 map：键就是选项值，值就是那一条 rubric。 */
     @Test
-    @Disabled("S02：Choice 的选项在官方 criteria map 里，目前解析为空")
     void choiceOptionsComeFromTheOfficialCriteriaMap() {
         Question department = questionOf(contract("choice"), "department");
 
@@ -48,7 +49,6 @@ class OfficialProtocolTest {
 
     /** 官方 Score 的 criteria 是一个**有序** array：下标就是等级，顺序参与指纹，因此这里用 containsExactly。 */
     @Test
-    @Disabled("S02：Score 的等级在官方 criteria array 里，目前解析为空")
     void scoreLevelsKeepTheOfficialCriteriaArrayOrder() {
         Question frustration = questionOf(contract("score"), "frustration");
 
@@ -59,7 +59,6 @@ class OfficialProtocolTest {
 
     /** 官方 Noul 的 criteria 是带 true / false 两个键的 object，两个键各是一条规则。 */
     @Test
-    @Disabled("S02：Noul 的 true / false 规则在官方 criteria object 里，目前解析为空")
     void noulRulesComeFromTheOfficialTrueFalseObject() {
         Question urgent = questionOf(contract("noul"), "is_urgent");
 
@@ -71,7 +70,6 @@ class OfficialProtocolTest {
 
     /** 探针里那条最直接的复现：三类官方 question 解析完，criteria 全都是空的。 */
     @Test
-    @Disabled("S02：官方三类 question 的 criteria 目前全部解析为空")
     void everyOfficialQuestionKeepsItsCriteria() {
         assertThat(contract("all-types").questions())
                 .hasSize(3)
@@ -82,11 +80,10 @@ class OfficialProtocolTest {
 
     /**
      * 官方规范说 instructions “can be a string, an object, or an array”，而 v0.5.0 用只接受字符串的
-     * {@code text()} 读它，于是结构化的一律变成 null。这里只要求"没被丢掉"：S02 可以留成 String 也可以换成
-     * JsonNode，两种修法都不该让两份**不同**的结构化说明塌成同一个值。
+     * {@code text()} 读它，于是结构化的一律变成 null。S02 之后领域对象保留原始 {@link JsonNode}：两份**不同**
+     * 的结构化说明不再塌成同一个值。
      */
     @Test
-    @Disabled("S02：instructions 为 object / array 时目前被丢成 null")
     void structuredInstructionsAreNotDropped() {
         DecisionContract contract = contract("structured-instructions");
 
@@ -99,10 +96,9 @@ class OfficialProtocolTest {
 
     /**
      * F01 的用户可见症状：官方 Choice 的一条 rubric 改了字，契约诊断里却什么都看不到（因为两边都解析成
-     * 0 条 criteria）。S02 之后这必须是 FAIL 并指名那一条。
+     * 0 条 criteria）。
      */
     @Test
-    @Disabled("S02：官方 criteria map 的文案变更目前在契约里不可见")
     void aRewordedOfficialRubricIsVisibleInTheContract() {
         JsonNode recorded = JevProtocolFixtures.questions("choice");
         ObjectNode reworded = recorded.deepCopy();
@@ -116,9 +112,60 @@ class OfficialProtocolTest {
                 .contains(ContractDiff.Change.Kind.CRITERION_CHANGED);
     }
 
+    /** criteria 的值本身也可以是 object / array：rubric 里的一个字段改了，诊断同样要指名那一条。 */
+    @Test
+    void aChangedStructuredRubricIsVisibleInTheContract() {
+        JsonNode recorded = JevProtocolFixtures.questions("structured-instructions");
+        ObjectNode changed = recorded.deepCopy();
+        ((ObjectNode) changed.path("route").path("criteria").path("billing"))
+                .put("summary", "Money movement, and nothing else.");
+
+        ContractDiff diff = diff(recorded, changed);
+
+        assertThat(diff.status()).isEqualTo(ContractDiff.Status.FAIL);
+        assertThat(diff.changes()).extracting(ContractDiff.Change::subject).contains("option billing");
+    }
+
+    /**
+     * criteria map 的键序不参与 canonical JSON，因此也不参与指纹：同一份 Choice 换个键序既不是 FAIL，也不该在
+     * PASS 的报告里留下一行自相矛盾的 {@code ~ order}。只有 array 形状（官方 Score 的等级、v1 的
+     * {@code options[]} / {@code levels[]}）才有顺序可谈。
+     */
+    @Test
+    void aReorderedOfficialCriteriaMapIsNotAChange() {
+        ObjectNode reordered = JevProtocolFixtures.questions("choice").deepCopy();
+        ObjectNode criteria = (ObjectNode) reordered.path("department").path("criteria");
+        ObjectNode backwards = JsonNodeFactory.instance.objectNode();
+        List.of("sales", "technical", "billing").forEach(label -> backwards.set(label, criteria.get(label)));
+        ((ObjectNode) reordered.path("department")).set("criteria", backwards);
+
+        ContractDiff diff = diff(JevProtocolFixtures.questions("choice"), reordered);
+
+        assertThat(diff.status()).isEqualTo(ContractDiff.Status.PASS);
+        assertThat(diff.changes()).isEmpty();
+    }
+
+    /** 官方 Score 的等级标签就是 array 下标，因此重排是"每个等级的文案变了"，而不是 {@code ~ order}。 */
+    @Test
+    void aReorderedOfficialScoreArrayShowsUpAsChangedLevels() {
+        ObjectNode reordered = JevProtocolFixtures.questions("score").deepCopy();
+        ArrayNode levels = (ArrayNode) reordered.path("frustration").path("criteria");
+        ArrayNode reversed = JsonNodeFactory.instance.arrayNode();
+        for (int level = levels.size() - 1; level >= 0; level--) {
+            reversed.add(levels.get(level));
+        }
+        ((ObjectNode) reordered.path("frustration")).set("criteria", reversed);
+
+        ContractDiff diff = diff(JevProtocolFixtures.questions("score"), reordered);
+
+        // 中间那一级 reversing 之后还是同一句文案：比较是按标签查表的，不是"数组动过就全报一遍"。
+        assertThat(diff.status()).isEqualTo(ContractDiff.Status.FAIL);
+        assertThat(diff.changes()).extracting(ContractDiff.Change::subject)
+                .containsExactly("level 0", "level 2");
+    }
+
     /** F01 的另一半：官方 Noul 的作答字段叫 {@code noul}，simulate 的 {@code --probability} 落不上去。 */
     @Test
-    @Disabled("S02：--probability 目前写不到官方的 noul 字段上")
     void aProbabilityOverrideReachesTheOfficialNoulField() {
         byte[] body = JevProtocolFixtures.responseBody("noul");
         AnswerOverrides overrides = new AnswerOverrides(null, null, null, null, 0.2);

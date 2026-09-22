@@ -1,6 +1,7 @@
 package io.jevtape.cli;
 
 import io.jevtape.testing.FakeJevServer;
+import io.jevtape.testing.JevProtocolFixtures;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import picocli.CommandLine;
@@ -40,6 +41,10 @@ class RecordCommandTest {
 
     private static final String RESPONSE_BODY =
             "{\"model\":\"jev-1.13.0\",\"answers\":{\"route\":{\"choice\":\"billing\"},\"urgent\":{\"probability\":0.91}}}";
+
+    /** 官方协议样例：三类小写 type 同处一份请求（{@code fixtures/jev-protocol/all-types.json}）。 */
+    private static final String OFFICIAL_REQUEST_BODY =
+            new String(JevProtocolFixtures.request("all-types"), StandardCharsets.UTF_8);
 
     @TempDir
     Path dir;
@@ -97,6 +102,16 @@ class RecordCommandTest {
                 post(target, REQUEST_BODY.replace("SUP-4821", "SUP-9999"));
                 await(out, "REC  systemone-", 2);
                 assertThat(cassetteFiles(cassettes)).hasSize(2);
+
+                // 官方形状（小写 type，criteria 是 map / 有序 array / true-false object）走同一条路径：
+                // REC 块照样一行一个 question，type 打的是磁带里的原文，不被归一化。
+                post(target, OFFICIAL_REQUEST_BODY);
+                await(out, "REC  systemone-", 3);
+                assertThat(out.toString())
+                        .contains("     choice department")
+                        .contains("     score frustration")
+                        .contains("     noul is_urgent");
+                assertThat(cassetteFiles(cassettes)).hasSize(3);
 
                 String printed = out.toString();
                 assertThat(printed).doesNotContainIgnoringCase(API_KEY, "bearer", "authorization", "cookie",

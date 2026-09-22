@@ -295,6 +295,27 @@ class RecordingJevTransportTest {
         assertThat(cassetteFiles()).isEmpty();
     }
 
+    /**
+     * 重复键与尾随内容都"解析得动"，但本地理解的 body 与上游收到的不是同一份：前者后者静默覆盖前者，后者
+     * 只读第一个值。指纹于是描述了一个上游从来没见过的请求，回放时会拿着它去比。这类输入必须在转发前拒掉。
+     */
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{\"model\":\"jev-latest\",\"state\":\"x\",\"state\":\"y\",\"questions\":{}}",
+            "{\"model\":\"jev-latest\",\"state\":\"x\",\"questions\":{}}{\"model\":\"jev-latest\"}"
+    })
+    void rejectsAnAmbiguousRequestBeforeItEverReachesUpstream(String body) throws IOException {
+        assertThatThrownBy(() -> recording().send(new JevRequest("POST", "/v1/systemone", Map.of(), bytes(body))))
+                .isInstanceOf(InvalidJevRequest.class)
+                .hasMessageContaining("ambiguous JSON")
+                // 诊断不回显 body：重复的那个键名可能正是用户 state 里的敏感值。
+                .hasMessageNotContaining("jev-latest");
+
+        assertThat(upstream.received()).isEmpty();
+        assertThat(recorded).isEmpty();
+        assertThat(cassetteFiles()).isEmpty();
+    }
+
     @Test
     void writesNothingWhenTheUpstreamCallFails() throws IOException {
         URI dead = URI.create("http://127.0.0.1:" + freePort());

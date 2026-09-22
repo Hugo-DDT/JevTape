@@ -1,6 +1,9 @@
 package io.jevtape.contract;
 
+import com.fasterxml.jackson.core.JsonFactory;
+import com.fasterxml.jackson.core.JsonParser;
 import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.core.StreamReadFeature;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.DoubleNode;
@@ -15,6 +18,7 @@ import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 /**
@@ -25,6 +29,11 @@ import java.util.Map;
  * 因为错误状态码同样属于 tape（charter §54）。这里也是唯一把 JSON 字段翻译成 {@link DecisionContract} 与
  * {@link DecisionAnswers} 的地方，于是 verify / diff 的比较逻辑不必认识 System One 的字段名；simulate 往
  * 应答里写覆盖也走这里，因此"字段叫什么"这件事在整个工程里只有一份。
+ *
+ * <p>协议形状以当前官方规范为准（{@code fixtures/jev-protocol}）：question type 是小写的
+ * {@code choice} / {@code score} / {@code noul}，三类的可选项都叫 {@code criteria}，只是形状各不相同。
+ * 已发布 v1 磁带里的大写 type 与 {@code options[]} / {@code levels[]} 仍能读 —— 旧磁带不该因为上游改了
+ * 文档就失效（charter §63）—— 但那只是历史兼容分支，不是主路径。
  */
 public final class JevProtocolAdapter {
 
@@ -47,6 +56,15 @@ public final class JevProtocolAdapter {
 
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * 请求侧的解析比响应侧严格：重复键（后者静默覆盖前者）与尾随内容（{@code readTree} 只读第一个值）都会让
+     * "JevTape 理解的 body"与"上游收到的 body"不是同一份 —— 指纹于是描述了一个上游从来没见过的请求。
+     * JevTape 不重新实现官方的请求校验器，但这类有歧义的输入必须在转发之前就拒掉。
+     */
+    private static final JsonFactory STRICT_JSON = JsonFactory.builder()
+            .enable(StreamReadFeature.STRICT_DUPLICATE_DETECTION)
+            .build();
+
     private JevProtocolAdapter() {
     }
 
@@ -54,13 +72,20 @@ public final class JevProtocolAdapter {
      * 从**原始**请求 body 中提取语义字段。必须在任何脱敏之前调用：脱敏后的内容不能当 fingerprint 的源
      * （charter §52）。
      *
-     * @throws InvalidJevRequest 当 body 不是 JSON object —— 那不是 JevTape 支持的 System One 请求
+     * @throws InvalidJevRequest 当 body 不是一个 JSON object，或者不是一份无歧义的 JSON —— 那不是 JevTape
+     *                           支持的 System One 请求
      */
     public static Decision parseRequest(byte[] body) {
-        JsonNode root = tryParse(body);
-        if (root == null || !root.isObject()) {
-            throw new InvalidJevRequest("A System One request must carry a JSON object body"
-                    + (root == null ? ", but this body is not JSON at all" : ", got: " + root.getNodeType()));
+        JsonNode root = tryParseRequest(body);
+        if (root == null) {
+            // 严格解析不给原因（重复键的名字与尾随内容都可能带着用户 state），只在错误路径上多说一句是哪种。
+            throw new InvalidJevRequest("A System One request must carry a JSON object body, but this body "
+                    + (tryParse(body) == null ? "is not JSON at all"
+                            : "is ambiguous JSON: it repeats a key or carries trailing content"));
+        }
+        if (!root.isObject()) {
+            throw new InvalidJevRequest("A System One request must carry a JSON object body, got: "
+                    + root.getNodeType());
         }
         return new Decision(text(root.get("model")), field(root, "state"), field(root, "questions"));
     }
@@ -110,47 +135,95 @@ public final class JevProtocolAdapter {
     }
 
     /**
-     * 三种 question 归一成同一种形状（charter §28 列的正是这些内容）：Choice 读 {@code options[].value} 与
-     * 其 {@code criteria}，Score 读 {@code levels[].score} 与其 {@code criteria}，Noul 只有一条
-     * {@code criteria}（因此标签是空串）。认不出来的类型没有可比的结构，只留下名字与类型 —— 它若真的变了，
-     * contract fingerprint 会说话。
+     * 三类 question 归一成同一种形状（charter §28 列的正是这些内容）："一个标签 + 一段 criteria 文本"，
+     * 于是一次比较只需要一条路径而不是三条。
+     *
+     * <p>官方协议里三类的可选项都叫 {@code criteria}，只是形状不同：Choice 是 map（键就是选项值），Score 是
+     * **有序** array（下标就是等级，官方应答的 {@code legend} 用的正是这个下标），Noul 是带 {@code true} /
+     * {@code false} 两个键的 object（两个键各是一条**有标签**的规则）。v1 磁带的大写 type 走
+     * {@code options[]} / {@code levels[]} / 单条无标签 criteria，只作为历史兼容分支保留。
+     *
+     * <p>认不出来的类型没有可比的结构，只留下名字与类型 —— 它若真的变了，contract fingerprint 会说话。
+     * type 的原文不被改写（不做大小写归一化）：原始 questions 是指纹的源，显示层要统一叫法也不该在这里动手。
      */
     private static DecisionContract.Question question(String name, JsonNode node) {
         JsonNode type = node.get("type");
         String questionType = type != null && type.isTextual() ? type.asText() : "Question";
-        List<DecisionContract.Criterion> criteria = switch (questionType) {
-            case "Choice" -> parseCriteria(node.get("options"), "value");
-            case "Score" -> parseCriteria(node.get("levels"), "score");
-            case "Noul" -> node.path("criteria").isValueNode()
-                    ? List.of(new DecisionContract.Criterion("", text(node.get("criteria"))))
-                    : List.of();
-            default -> List.of();
-        };
         return new DecisionContract.Question(name, questionType, criteriaNoun(questionType),
-                text(node.get("instructions")), criteria);
+                field(node, "instructions"), criteria(questionType, node));
     }
 
-    private static List<DecisionContract.Criterion> parseCriteria(JsonNode array, String labelField) {
+    /** 按 type 认形状；官方形状看 {@code criteria} 到底是什么，认不出来再退回 v1 的 {@code options[]} 等。 */
+    private static List<DecisionContract.Criterion> criteria(String questionType, JsonNode node) {
+        JsonNode criteria = node.get("criteria");
+        return switch (questionType.toLowerCase(Locale.ROOT)) {
+            case "choice" -> criteria != null && criteria.isObject()
+                    ? fromMap(criteria)
+                    : fromLabelledArray(node.get("options"), "value");
+            case "score" -> criteria != null && criteria.isArray()
+                    ? fromOrderedArray(criteria)
+                    : fromLabelledArray(node.get("levels"), "score");
+            case "noul" -> criteria != null && criteria.isObject()
+                    ? fromMap(criteria)
+                    : fromSingle(criteria);
+            default -> List.of();
+        };
+    }
+
+    /**
+     * Choice 的 criteria map 与 Noul 的 true / false object：键就是标签，值就是那一条 rubric。
+     *
+     * <p>标签按字典序给出，不照抄请求里的键序：object 的 key 序不参与 canonical JSON，因此也不参与指纹，
+     * 照抄会让"同一份契约、键序不同"在诊断里多出一行 {@code ~ order}，而判定又是 PASS —— 报告自相矛盾。
+     */
+    private static List<DecisionContract.Criterion> fromMap(JsonNode criteria) {
+        List<String> labels = new ArrayList<>();
+        criteria.fieldNames().forEachRemaining(labels::add);
+        labels.sort(null);
+        return labels.stream()
+                .map(label -> new DecisionContract.Criterion(label, criteriaText(criteria.get(label))))
+                .toList();
+    }
+
+    /** Score 的 criteria array：顺序就是等级，因此标签是下标本身 —— 换个顺序在诊断里是"level 1 变了"。 */
+    private static List<DecisionContract.Criterion> fromOrderedArray(JsonNode criteria) {
+        List<DecisionContract.Criterion> result = new ArrayList<>();
+        for (int level = 0; level < criteria.size(); level++) {
+            result.add(new DecisionContract.Criterion(Integer.toString(level), criteriaText(criteria.get(level))));
+        }
+        return result;
+    }
+
+    /** v1 的 Noul：整条 criteria 就是一个字符串，没有标签可打。写成 {@code null} 是"没写"，不凭空造一条。 */
+    private static List<DecisionContract.Criterion> fromSingle(JsonNode criteria) {
+        return criteria == null || !criteria.isValueNode() || criteria.isNull()
+                ? List.of()
+                : List.of(new DecisionContract.Criterion("", criteriaText(criteria)));
+    }
+
+    /** v1 的 Choice {@code options[]} 与 Score {@code levels[]}：标签藏在每一项的某个字段里。 */
+    private static List<DecisionContract.Criterion> fromLabelledArray(JsonNode array, String labelField) {
         if (array == null || !array.isArray()) {
             return List.of();
         }
         List<DecisionContract.Criterion> result = new ArrayList<>();
         for (JsonNode item : array) {
-            result.add(new DecisionContract.Criterion(label(item.get(labelField)), text(item.get("criteria"))));
+            result.add(new DecisionContract.Criterion(label(item.get(labelField)),
+                    criteriaText(item.get("criteria"))));
         }
         return result;
     }
 
     /** 可选项在诊断里叫什么，是 Jev 的知识，因此在这里定下来而不是留给渲染的一方去猜。 */
     private static String criteriaNoun(String questionType) {
-        return switch (questionType) {
-            case "Choice" -> "option";
-            case "Score" -> "level";
+        return switch (questionType.toLowerCase(Locale.ROOT)) {
+            case "choice" -> "option";
+            case "score" -> "level";
             default -> "criteria";
         };
     }
 
-    /** 标签既可能是字符串（Choice 的 value）也可能是数字（Score 的 score）；缺失时是空串。 */
+    /** v1 的标签既可能是字符串（Choice 的 value）也可能是数字（Score 的 score）；缺失时是空串。 */
     private static String label(JsonNode node) {
         return node == null || node.isNull() || !node.isValueNode() ? "" : node.asText();
     }
@@ -259,7 +332,9 @@ public final class JevProtocolAdapter {
                 target(result, node, "confidence", overrides.confidence());
                 target(result, node, "choice", overrides.choice());
                 target(result, node, "score", overrides.score());
+                // 官方 Noul 的作答字段叫 noul，v1 磁带里叫 probability：--probability 两边都得落得下去。
                 target(result, node, "probability", overrides.probability());
+                target(result, node, "noul", overrides.probability());
             }
         });
         return result;
@@ -282,6 +357,15 @@ public final class JevProtocolAdapter {
         return node.isValueNode() ? node.asText() : node.toString();
     }
 
+    /**
+     * 一条 criteria 的正文。官方允许它写成 object 或 array（例如 {@code {"summary": "…", "examples": […]}}），
+     * 只接受字符串的读法会把整条 rubric 丢成 null，于是两份**不同**的 criteria 在契约里长得一模一样。
+     * 没写（缺失或 JSON null）与写了一段空文案仍然是两件事，前者是 null。
+     */
+    private static String criteriaText(JsonNode node) {
+        return node == null || node.isNull() ? null : display(node);
+    }
+
     /** 解析不出来时返回 null，由调用方决定是报错还是退化。 */
     private static JsonNode tryParse(byte[] body) {
         if (body == null || body.length == 0) {
@@ -290,6 +374,20 @@ public final class JevProtocolAdapter {
         try {
             JsonNode node = MAPPER.readTree(body);
             return node == null || node.isMissingNode() ? null : node;
+        } catch (IOException e) {
+            return null;
+        }
+    }
+
+    /** 请求专用的严格解析，见 {@link #STRICT_JSON}；有歧义时返回 null，由 parseRequest 变成具名错误。 */
+    private static JsonNode tryParseRequest(byte[] body) {
+        if (body == null || body.length == 0) {
+            return null;
+        }
+        try (JsonParser parser = STRICT_JSON.createParser(body)) {
+            JsonNode node = MAPPER.readTree(parser);
+            // readTree 只读第一个值：后面还有 token 就说明这份 body 不是一次请求，而是两边各看一半的输入。
+            return node == null || node.isMissingNode() || parser.nextToken() != null ? null : node;
         } catch (IOException e) {
             return null;
         }

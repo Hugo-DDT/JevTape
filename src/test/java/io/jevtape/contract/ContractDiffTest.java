@@ -197,7 +197,7 @@ class ContractDiffTest {
         assertThat(rendered(diff)).containsExactly("CRITERION_CHANGED severity level 5");
     }
 
-    /** Noul 只有一条 criteria，没有名字可打，因此诊断里就只剩这个概念本身。 */
+    /** v1 的 Noul 只有一条 criteria，没有名字可打，诊断里就只剩这个概念本身（官方 Noul 见 OfficialProtocolTest）。 */
     @Test
     void aNoulCriterionHasNoLabel() {
         ContractDiff diff = diff(QUESTIONS, REWORDED_NOUL_CRITERIA);
@@ -247,10 +247,10 @@ class ContractDiffTest {
 
     /**
      * F02 的用户可见形态：官方 Choice 的 criteria map 少了一个键（等于删掉一个选项），同时新增一个
-     * question。今天两边都解析成 0 条 criteria，删除根本看不见，于是同样停在 WARN。
+     * question。删除看得见之后，这一条就不再被那个合法新增掩盖（{@link #anUnmodelledChangeIsNotRescuedByALegitimateAddition}
+     * 是同一个盲区的另一半，仍等 S03）。
      */
     @Test
-    @Disabled("S02 + S03：官方 Choice 少了一个选项 + 新增 question，目前判 WARN")
     void aRemovedOfficialOptionIsNotRescuedByANewQuestion() {
         ObjectNode recorded = JevProtocolFixtures.questions("choice").deepCopy();
         ObjectNode current = recorded.deepCopy();

@@ -5,6 +5,7 @@ import io.jevtape.cassette.FileCassetteRepository;
 import io.jevtape.contract.JevProtocolAdapter;
 import io.jevtape.fingerprint.FingerprintEngine;
 import io.jevtape.testing.FakeJevServer;
+import io.jevtape.testing.JevProtocolFixtures;
 import io.jevtape.transport.JevRequest;
 import io.jevtape.transport.LiveJevTransport;
 import io.jevtape.transport.RecordingJevTransport;
@@ -51,12 +52,16 @@ class VerifyCommandTest {
     private static final String REWORDED_OPTION = REQUEST.replace(
             "\"criteria\":\"Invoices.\"", "\"criteria\":\"Refunds and payments.\"");
 
+    /** 官方协议样例里三类 question 同处一份请求（{@code fixtures/jev-protocol/all-types.json}）。 */
+    private static final String OFFICIAL_REQUEST =
+            new String(JevProtocolFixtures.request("all-types"), StandardCharsets.UTF_8);
+
     /** 只多了一个选项，既有内容一字未改。 */
     private static final String EXTRA_OPTION = REQUEST.replace(
             "{\"value\":\"technical\",\"criteria\":\"Bugs.\"}]",
             "{\"value\":\"technical\",\"criteria\":\"Bugs.\"},{\"value\":\"other\",\"criteria\":\"Anything else.\"}]");
 
-    /** Noul 只有一条 criteria，没有标签可打，因此诊断里就只剩这个概念本身。 */
+    /** v1 的 Noul 只有一条 criteria，没有标签可打，因此诊断里就只剩这个概念本身。 */
     private static final String REWORDED_NOUL = REQUEST.replace(
             "Customer is blocked.", "Customer is blocked and losing money.");
 
@@ -157,6 +162,24 @@ class VerifyCommandTest {
 
         assertThat(result.exitCode()).isEqualTo(1);
         assertThat(result.out()).contains("Verdict   FAIL").contains("urgent\n  ~ criteria");
+    }
+
+    /**
+     * 官方形状（小写 type、Choice 的 criteria map、Score 的 criteria array、Noul 的 true / false object）走的
+     * 是同一条 record → verify 路径：三类 question 都读得出可选项，改一条 rubric 就指名那一条。
+     */
+    @Test
+    void anOfficialShapedRequestIsVerifiedDownToTheRubric() throws IOException {
+        Cassette cassette = record(OFFICIAL_REQUEST);
+
+        Result unchanged = verify(cassette, writeRequest(OFFICIAL_REQUEST));
+        Result reworded = verify(cassette, write("official-reworded.json",
+                OFFICIAL_REQUEST.replace("Payments, invoicing, refunds", "Payments and refunds only.")));
+
+        assertThat(unchanged.exitCode()).isZero();
+        assertThat(unchanged.out()).contains("Verdict   PASS");
+        assertThat(reworded.exitCode()).isEqualTo(1);
+        assertThat(reworded.out()).contains("Verdict   FAIL").contains("department\n  ~ option billing");
     }
 
     /** 报告只谈契约：state 的正文既不进指纹也不进输出，因此改了 state 仍然是 PASS。 */

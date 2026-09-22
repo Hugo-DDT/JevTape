@@ -59,7 +59,7 @@ JevTape records more than HTTP responses — it records the full **decision cont
 
 - Jev input State
 - Question definitions and types (Choice / Score / Noul)
-- Choice criteria, Score levels, Noul criteria
+- Criteria of every question type (an option map, ordered score levels, true/false rules)
 - Model, Probability, Confidence, Usage
 - **Decision Contract fingerprint**
 
