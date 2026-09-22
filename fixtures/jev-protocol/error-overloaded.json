@@ -1,0 +1,25 @@
+{
+  "request": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this convey urgency?",
+        "criteria": {
+          "true": "Explicitly time-sensitive",
+          "false": "No urgency expressed"
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 529,
+    "body": {
+      "error": {
+        "type": "overloaded",
+        "message": "System One is overloaded, retry later."
+      }
+    }
+  }
+}

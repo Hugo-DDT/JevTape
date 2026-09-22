@@ -1,0 +1,25 @@
+{
+  "request": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "is_urgent": {
+        "type": "noul",
+        "instructions": "Does this convey urgency?",
+        "criteria": {
+          "true": "Explicitly time-sensitive",
+          "false": "No urgency expressed"
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 429,
+    "body": {
+      "error": {
+        "type": "rate_limit_exceeded",
+        "message": "Too many requests, retry after 30 seconds."
+      }
+    }
+  }
+}

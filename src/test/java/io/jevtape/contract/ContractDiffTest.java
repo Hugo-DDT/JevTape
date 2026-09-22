@@ -2,8 +2,11 @@ package io.jevtape.contract;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
 import io.jevtape.fingerprint.FingerprintEngine;
 import io.jevtape.shared.InvalidJevRequest;
+import io.jevtape.testing.JevProtocolFixtures;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 
 import java.io.IOException;
@@ -85,6 +88,17 @@ class ContractDiffTest {
     /** 多出来一个 JevTape 不认识的字段：结构比较看不出来，指纹却不一样。 */
     private static final String UNMODELLED_FIELD = QUESTIONS.replace(
             "\"route\":{\"type\":\"Choice\"", "\"route\":{\"type\":\"Choice\",\"weight\":2");
+
+    /**
+     * F02 的原始复现输入：既有 question 上一个**不建模**的字段被改了值，同时新增一个 question。
+     * 与 {@link #UNMODELLED_FIELD} 的差别在于这里是改值而不是加字段 —— 两者对结构比较同样不可见。
+     */
+    private static final String WITH_UNMODELLED_FIELD =
+            "{\"q\":{\"type\":\"Noul\",\"criteria\":\"x\",\"extension\":\"old\"}}";
+
+    private static final String UNMODELLED_FIELD_CHANGED_PLUS_NEW_QUESTION =
+            "{\"q\":{\"type\":\"Noul\",\"criteria\":\"x\",\"extension\":\"new\"},"
+                    + "\"added\":{\"type\":\"Noul\",\"criteria\":\"y\"}}";
 
     @Test
     void anUnchangedContractPasses() {
@@ -216,6 +230,40 @@ class ContractDiffTest {
         assertThat(diff.recordedContract()).isNotEqualTo(diff.currentContract());
     }
 
+    /**
+     * F02：同一个盲区被一个**合法**新增掩盖了。结构比较只看得见 {@code QUESTION_ADDED}，于是
+     * {@code allMatch(addition)} 判 WARN、退出码 0 —— 而既有 question 里那个不建模的字段已经变了，replay
+     * 必定 MISS。{@link #aChangeOutsideTheModelStillFails} 证明没有新增时这里会判 FAIL，因此漏判正是
+     * "新增把变化救了回来"。
+     */
+    @Test
+    @Disabled("S03：既有内容被改 + 一个合法新增，目前判 WARN 而不是 FAIL")
+    void anUnmodelledChangeIsNotRescuedByALegitimateAddition() {
+        ContractDiff diff = diff(WITH_UNMODELLED_FIELD, UNMODELLED_FIELD_CHANGED_PLUS_NEW_QUESTION);
+
+        assertThat(diff.recordedContract()).isNotEqualTo(diff.currentContract());
+        assertThat(diff.status()).isEqualTo(ContractDiff.Status.FAIL);
+    }
+
+    /**
+     * F02 的用户可见形态：官方 Choice 的 criteria map 少了一个键（等于删掉一个选项），同时新增一个
+     * question。今天两边都解析成 0 条 criteria，删除根本看不见，于是同样停在 WARN。
+     */
+    @Test
+    @Disabled("S02 + S03：官方 Choice 少了一个选项 + 新增 question，目前判 WARN")
+    void aRemovedOfficialOptionIsNotRescuedByANewQuestion() {
+        ObjectNode recorded = JevProtocolFixtures.questions("choice").deepCopy();
+        ObjectNode current = recorded.deepCopy();
+        ((ObjectNode) current.path("department").path("criteria")).remove("sales");
+        current.set("is_urgent", JevProtocolFixtures.questions("noul").path("is_urgent"));
+
+        ContractDiff diff = diff(recorded, current);
+
+        assertThat(diff.status()).isEqualTo(ContractDiff.Status.FAIL);
+        assertThat(diff.changes()).extracting(ContractDiff.Change::kind)
+                .contains(ContractDiff.Change.Kind.CRITERION_REMOVED);
+    }
+
     /** 手改过的 cassette 可能缺 contract 指纹，这时只剩结构比较可依据 —— 它说没变就是 PASS。 */
     @Test
     void aMissingRecordedFingerprintLeavesTheStructuralComparisonInCharge() {
@@ -240,6 +288,14 @@ class ContractDiffTest {
         return ContractDiff.between(recordedFingerprint, FingerprintEngine.contract(json(currentQuestions)),
                 JevProtocolAdapter.decisionContract(json(recordedQuestions)),
                 JevProtocolAdapter.decisionContract(json(currentQuestions)));
+    }
+
+    /** 已经是一棵树的两侧（例如从 {@code fixtures/jev-protocol} 读出来再改过一份）走这条。 */
+    private static ContractDiff diff(JsonNode recordedQuestions, JsonNode currentQuestions) {
+        return ContractDiff.between(FingerprintEngine.contract(recordedQuestions),
+                FingerprintEngine.contract(currentQuestions),
+                JevProtocolAdapter.decisionContract(recordedQuestions),
+                JevProtocolAdapter.decisionContract(currentQuestions));
     }
 
     /** 把一条变化压成一行，于是断言读起来就是用户在 Changes 一节里看到的那些短语。 */

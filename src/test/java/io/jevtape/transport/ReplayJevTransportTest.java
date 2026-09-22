@@ -6,8 +6,10 @@ import io.jevtape.cassette.FileCassetteRepository;
 import io.jevtape.matching.MatchResult;
 import io.jevtape.matching.MissDiagnosis;
 import io.jevtape.shared.InvalidJevRequest;
+import io.jevtape.shared.JevTapeException;
 import io.jevtape.shared.ReplayMiss;
 import io.jevtape.testing.FakeJevServer;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 
@@ -49,6 +51,16 @@ class ReplayJevTransportTest {
 
     private static final String RESPONSE_BODY =
             "{\"model\":\"jev-1.13.0\",\"answers\":{\"route\":{\"choice\":\"billing\",\"confidence\":0.74}}}";
+
+    /**
+     * F03 的输入：两个 state 只在最后一位小数上不同，数学值因此不同。v1 的 canonical JSON 走 Jackson 的
+     * double 路径，两者都塌成 {@code 0.12345678901234568}，于是共用一个 Replay Key。
+     */
+    private static final String LOSSY_DECIMAL_A =
+            "{\"model\":\"jev-latest\",\"state\":{\"value\":0.123456789012345678901},\"questions\":{}}";
+
+    private static final String LOSSY_DECIMAL_B =
+            "{\"model\":\"jev-latest\",\"state\":{\"value\":0.123456789012345678902},\"questions\":{}}";
 
     @TempDir
     Path cassetteDir;
@@ -112,6 +124,22 @@ class ReplayJevTransportTest {
 
         assertThat(decisions).singleElement().isInstanceOfSatisfying(MatchResult.Miss.class,
                 miss -> assertThat(miss.diagnosis().closestCassette()).isNull());
+    }
+
+    /**
+     * F03：录了 A 之后回放 B 必须**不**命中。今天两者共用一个 Replay Key，于是 B 拿到 A 的应答并且状态码
+     * 是 200 —— 一次静默的错误结果，比 MISS 危险得多。
+     *
+     * <p>断言写成"整条链路必须抛出一个具名错误"而不是"两个指纹必须不同"，于是两种修法都算通过：S08 在访问
+     * 上游或查询 cassette 之前就拒绝有损数字，V02 让两者的指纹真的不同（于是这里抛 {@link ReplayMiss}）。
+     */
+    @Test
+    @Disabled("S08：有损小数目前得到同一个 request 指纹，replay 因此错误 HIT")
+    void neighbouringDecimalsNeverCrossHit() {
+        record(200, Map.of("Content-Type", "application/json"), LOSSY_DECIMAL_A, RESPONSE_BODY);
+
+        assertThatThrownBy(() -> replaying().send(request(LOSSY_DECIMAL_B)))
+                .isInstanceOf(JevTapeException.class);
     }
 
     @Test
@@ -194,12 +222,17 @@ class ReplayJevTransportTest {
 
     /** 用真实的 record 路径产出一个 cassette，然后把上游关掉 —— 之后的 replay 无处可去。 */
     private void record(int status, Map<String, String> headers, String responseBody) {
+        record(status, headers, REQUEST_BODY, responseBody);
+    }
+
+    /** 同上，但录的是指定的那一份请求 —— "录 A 回放 B" 的用例需要它。 */
+    private void record(int status, Map<String, String> headers, String requestBody, String responseBody) {
         List<Cassette> recorded = new ArrayList<>();
         try (FakeJevServer upstream = new FakeJevServer()) {
             upstream.stub(status, headers, bytes(responseBody));
             new RecordingJevTransport(new LiveJevTransport(upstream.baseUrl(), Duration.ofSeconds(10)),
                     new FileCassetteRepository(cassetteDir), "0.1.0-test", recorded::add)
-                    .send(request(REQUEST_BODY));
+                    .send(request(requestBody));
         }
         assertThat(recorded).hasSize(1);
     }

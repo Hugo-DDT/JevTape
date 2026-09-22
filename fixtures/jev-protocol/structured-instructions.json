@@ -1,0 +1,58 @@
+{
+  "request": {
+    "state": {
+      "ticket": {
+        "id": "SUP-5102",
+        "subject": "Payout webhook keeps returning 500"
+      },
+      "history": ["opened by billing-eu", "escalated after 3 days"]
+    },
+    "model": "jev-latest",
+    "questions": {
+      "route": {
+        "type": "choice",
+        "instructions": {
+          "task": "Pick the team that should own this ticket.",
+          "constraints": ["Ignore the reporter's own guess", "Prefer the team that owns the failing webhook"]
+        },
+        "criteria": {
+          "billing": {
+            "summary": "Money movement",
+            "examples": ["payouts", "refunds"]
+          },
+          "technical": ["webhook delivery", "integration errors"]
+        }
+      },
+      "is_urgent": {
+        "type": "noul",
+        "instructions": ["Does this convey urgency?", "Judge the latest message only"],
+        "criteria": null
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "route": {
+          "type": "choice",
+          "choice": "technical",
+          "probabilities": {
+            "billing": 0.19,
+            "technical": 0.81
+          },
+          "confidence": 0.66
+        },
+        "is_urgent": {
+          "type": "noul",
+          "noul": 0.42
+        }
+      },
+      "usage": {
+        "input_tokens": 640,
+        "output_tokens": 41
+      }
+    }
+  }
+}

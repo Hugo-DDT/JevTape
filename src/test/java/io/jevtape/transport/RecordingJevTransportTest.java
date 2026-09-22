@@ -11,8 +11,11 @@ import io.jevtape.shared.UpstreamUnavailable;
 import io.jevtape.testing.FakeJevServer;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Disabled;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 
 import java.io.IOException;
 import java.net.ServerSocket;
@@ -44,6 +47,24 @@ class RecordingJevTransportTest {
 
     private static final String RESPONSE_BODY =
             "{\"model\":\"jev-1.13.0\",\"answers\":{\"route\":{\"choice\":\"billing\",\"confidence\":0.74}}}";
+
+    /**
+     * F04 用的是一对**已知**碰撞输入，不在 CI 里搜索：两个 state 的 request 指纹完整值不同，前 8 位十六进制
+     * 却都是 {@code 405767e3}，而 v0.5.0 的自动命名只用这 8 位。审查时的探针遍历了 50 万个整数才找到它，
+     * 这里把结果固定下来。
+     */
+    private static final String COLLIDING_STATE_A =
+            "{\"model\":\"jev-latest\",\"state\":{\"value\":5298},\"questions\":{}}";
+
+    private static final String COLLIDING_STATE_B =
+            "{\"model\":\"jev-latest\",\"state\":{\"value\":80011},\"questions\":{}}";
+
+    private static final String COLLIDING_SHORT_HASH = "405767e3";
+
+    /** F06 用的合成凭证：形状像真的，但哪里都无效。 */
+    private static final String QUERY_SECRET = "sk-live-DUMMY-9f2c1d4b";
+
+    private static final String QUERY_SECRET_PERCENT_ENCODED = "sk%2Dlive%2DDUMMY%2D9f2c1d4b";
 
     @TempDir
     Path cassetteDir;
@@ -98,6 +119,34 @@ class RecordingJevTransportTest {
                         "x-api-key", "session=abc123", "set-cookie");
     }
 
+    /**
+     * F06：header 侧的凭证有 {@link #forwardsCredentialsUpstreamButKeepsThemOutOfTheCassette} 守着，URL 侧
+     * 却没有 —— {@code request.path} 里的 query 原样落盘。v1 已经明确 query 不参与指纹，因此最小安全实现是
+     * 把整个 query 从存储的 path 里去掉：不必认识每一种凭证参数名，也就没有"漏掉一个名字"的天花板。
+     *
+     * <p>五种写法都要拦住：普通参数名、大写参数名、混在别的参数中间、重复出现，以及百分号编码过的值。
+     */
+    @ParameterizedTest
+    @Disabled("S06：query 里的凭证目前原样落盘到 request.path")
+    @ValueSource(strings = {
+            "/v1/systemone?api_key=" + QUERY_SECRET,
+            "/v1/systemone?API_KEY=" + QUERY_SECRET,
+            "/v1/systemone?trace=1&api_key=" + QUERY_SECRET,
+            "/v1/systemone?api_key=" + QUERY_SECRET + "&api_key=" + QUERY_SECRET,
+            "/v1/systemone?api_key=" + QUERY_SECRET_PERCENT_ENCODED})
+    void aCredentialInTheQueryNeverReachesTheCassette(String path) throws IOException {
+        upstream.stub(200, Map.of("Content-Type", "application/json"), bytes(RESPONSE_BODY));
+
+        recording().send(new JevRequest("POST", path, Map.of(), bytes(REQUEST_BODY)));
+
+        // 转发这一侧行为不变：上游拿到的仍是带原始 query 的目标。
+        assertThat(upstream.received().get(0).path()).isEqualTo(path);
+        // 存储这一侧：整个 query 都不留，于是任何编码形式的凭证都不可能落盘。
+        assertThat(recorded.get(0).request().path()).isEqualTo("/v1/systemone");
+        assertThat(Files.readString(cassetteFiles().get(0), StandardCharsets.UTF_8))
+                .doesNotContain(QUERY_SECRET, QUERY_SECRET_PERCENT_ENCODED, "api_key", "API_KEY", "?");
+    }
+
     @Test
     void fingerprintsComeFromTheOriginalRequestNotFromTheRedactedCopy() {
         upstream.stub(200, Map.of("Content-Type", "application/json"), bytes(RESPONSE_BODY));
@@ -143,6 +192,40 @@ class RecordingJevTransportTest {
 
         assertThat(recorded.get(0).name()).isNotEqualTo(recorded.get(1).name());
         assertThat(cassetteFiles()).hasSize(2);
+    }
+
+    /**
+     * 这条**现在就跑**：它把 F04 那对碰撞输入固定成事实 —— 完整指纹不同、前 8 位相同。于是 S05 的用例不必
+     * 在 CI 里搜碰撞，而且万一哪天有人改了这两份 state，这里会先说清楚"你选的例子已经不撞了"。
+     */
+    @Test
+    void theKnownCollidingInputsShareOnlyTheFirstEightHexDigits() {
+        String a = requestFingerprintOf(COLLIDING_STATE_A);
+        String b = requestFingerprintOf(COLLIDING_STATE_B);
+
+        assertThat(a).isNotEqualTo(b);
+        assertThat(a).startsWith("sha256:" + COLLIDING_SHORT_HASH);
+        assertThat(b).startsWith("sha256:" + COLLIDING_SHORT_HASH);
+    }
+
+    /**
+     * F04：自动命名只取 request 指纹的前 8 位，因此这两个不同的决策会被算成同一个名字
+     * {@code systemone-405767e3}，第二次录制直接覆盖第一次 —— 前一份应答从此丢失，而 replay 会拿它去回答
+     * 另一个请求（或者 MISS，取决于谁最后写）。
+     */
+    @Test
+    @Disabled("S05：短哈希同名，第二次录制直接覆盖第一次")
+    void bothRequestsWithTheSameShortHashStayReplayable() throws IOException {
+        record(COLLIDING_STATE_A, "{\"answer\":\"A\"}");
+        record(COLLIDING_STATE_B, "{\"answer\":\"B\"}");
+
+        assertThat(cassetteFiles()).hasSize(2);
+
+        ReplayJevTransport replay = new ReplayJevTransport(
+                new FileCassetteRepository(cassetteDir).loadAll(), result -> {
+                });
+        assertThat(replay.send(systemOne(COLLIDING_STATE_A)).body()).isEqualTo(bytes("{\"answer\":\"A\"}"));
+        assertThat(replay.send(systemOne(COLLIDING_STATE_B)).body()).isEqualTo(bytes("{\"answer\":\"B\"}"));
     }
 
     @Test
@@ -221,6 +304,21 @@ class RecordingJevTransportTest {
 
         assertThat(recorded).isEmpty();
         assertThat(cassetteFiles()).isEmpty();
+    }
+
+    /** 录一份指定请求 + 指定应答，走的是真实的 record 路径。 */
+    private void record(String requestBody, String responseBody) {
+        upstream.stub(200, Map.of("Content-Type", "application/json"), bytes(responseBody));
+        recording().send(systemOne(requestBody));
+    }
+
+    private static JevRequest systemOne(String body) {
+        return new JevRequest("POST", "/v1/systemone", Map.of(), bytes(body));
+    }
+
+    private static String requestFingerprintOf(String body) {
+        return FingerprintEngine.of("POST", "/v1/systemone", JevProtocolAdapter.parseRequest(bytes(body)))
+                .request();
     }
 
     private RecordingJevTransport recording() {

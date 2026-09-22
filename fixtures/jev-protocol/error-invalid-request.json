@@ -1,0 +1,21 @@
+{
+  "request": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this?"
+      }
+    }
+  },
+  "response": {
+    "status": 422,
+    "body": {
+      "error": {
+        "type": "invalid_request",
+        "message": "questions.department is missing required property 'criteria'."
+      }
+    }
+  }
+}

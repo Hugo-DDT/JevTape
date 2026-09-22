@@ -1,0 +1,39 @@
+{
+  "request": {
+    "state": "Help! My payouts have been failing for 3 days.",
+    "model": "jev-latest",
+    "questions": {
+      "department": {
+        "type": "choice",
+        "instructions": "Which team should handle this?",
+        "criteria": {
+          "billing": "Payments, invoicing, refunds",
+          "technical": "Bugs, outages, integrations",
+          "sales": "Pricing, upgrades, new accounts"
+        }
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "model": "jev-1.13.0",
+      "answers": {
+        "department": {
+          "type": "choice",
+          "choice": "billing",
+          "probabilities": {
+            "billing": 0.88,
+            "technical": 0.12,
+            "sales": 0.0
+          },
+          "confidence": 0.81
+        }
+      },
+      "usage": {
+        "input_tokens": 318,
+        "output_tokens": 34
+      }
+    }
+  }
+}
